@@ -309,6 +309,20 @@ pub async fn get_front_page(
             sources: g.source_count,
             stories: g.story_count,
             model: g.model.unwrap_or_default(),
+            language: g.editorial_language,
+            pinned: g.pinned,
+            analysis_html: render_body(&g.analysis_md),
+            watchpoints: g.watchpoints,
+            primary_sources: g
+                .primary_source_names
+                .into_iter()
+                .zip(g.primary_source_urls)
+                .map(|(name, url)| TopicSource { name, url })
+                .collect(),
+            last_updated: g
+                .last_briefed_at
+                .map(|at| at.to_rfc3339())
+                .unwrap_or_default(),
         })
         .collect();
 
@@ -379,12 +393,23 @@ pub async fn get_stories(
 }
 
 #[server(name = GetGaggle, prefix = "/rpc")]
-pub async fn get_gaggle(slug: String) -> Result<Option<GagglePage>, ServerFnError> {
+pub async fn get_gaggle(
+    slug: String,
+    language: String,
+) -> Result<Option<GagglePage>, ServerFnError> {
+    use std::str::FromStr;
     let db = db();
-    let Some(g) = bg_db::gaggles::by_slug(db, &slug).await.map_err(e)? else {
+    let language = bg_core::domain::EditorialLanguage::from_str(&language)
+        .unwrap_or(bg_core::domain::EditorialLanguage::Zh);
+    let Some(g) = bg_db::gaggles::by_slug(db, &slug, language)
+        .await
+        .map_err(e)?
+    else {
         return Ok(None);
     };
-    let ids = bg_db::gaggles::story_ids(db, &slug).await.map_err(e)?;
+    let ids = bg_db::gaggles::story_ids(db, &slug, language)
+        .await
+        .map_err(e)?;
 
     let mut stories = Vec::with_capacity(ids.len());
     for id in &ids {
@@ -403,6 +428,20 @@ pub async fn get_gaggle(slug: String) -> Result<Option<GagglePage>, ServerFnErro
             sources: g.source_count,
             stories: g.story_count,
             model: g.model.unwrap_or_default(),
+            language: g.editorial_language,
+            pinned: g.pinned,
+            analysis_html: render_body(&g.analysis_md),
+            watchpoints: g.watchpoints,
+            primary_sources: g
+                .primary_source_names
+                .into_iter()
+                .zip(g.primary_source_urls)
+                .map(|(name, url)| TopicSource { name, url })
+                .collect(),
+            last_updated: g
+                .last_briefed_at
+                .map(|at| at.to_rfc3339())
+                .unwrap_or_default(),
         },
         stories: cards,
     }))
@@ -949,11 +988,13 @@ pub async fn get_standards() -> Result<StandardsPage, ServerFnError> {
 }
 
 #[server(name = GetFlyway, prefix = "/rpc")]
-pub async fn get_flyway() -> Result<FlywayPage, ServerFnError> {
+pub async fn get_flyway(language: String) -> Result<FlywayPage, ServerFnError> {
     use std::collections::BTreeMap;
     use std::str::FromStr;
     let db = db();
     const DAYS: i32 = 14;
+    let language = bg_core::domain::EditorialLanguage::from_str(&language)
+        .unwrap_or(bg_core::domain::EditorialLanguage::Zh);
 
     let rows = bg_db::stories::flyway(db, DAYS).await.map_err(e)?;
     let mut by_cat: BTreeMap<String, BTreeMap<chrono::NaiveDate, i64>> = BTreeMap::new();
@@ -975,7 +1016,10 @@ pub async fn get_flyway() -> Result<FlywayPage, ServerFnError> {
                 })
                 .collect();
             let label = bg_core::domain::Category::from_str(&cat)
-                .map(|c| c.label().to_string())
+                .map(|c| match language {
+                    bg_core::domain::EditorialLanguage::Zh => c.label_zh().to_string(),
+                    bg_core::domain::EditorialLanguage::En => c.label().to_string(),
+                })
                 .unwrap_or_else(|_| cat.clone());
             CategoryTrend {
                 category: cat,
@@ -994,9 +1038,38 @@ pub async fn get_flyway() -> Result<FlywayPage, ServerFnError> {
         .map(|(ent, n)| (ent.name, ent.slug, n))
         .collect();
 
+    let topics = bg_db::gaggles::live_for_language(db, language, 24 * 14, 20)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|g| GaggleCard {
+            slug: g.slug,
+            title: g.title,
+            standfirst: g.standfirst,
+            sources: g.source_count,
+            stories: g.story_count,
+            model: g.model.unwrap_or_default(),
+            language: g.editorial_language,
+            pinned: g.pinned,
+            analysis_html: render_body(&g.analysis_md),
+            watchpoints: g.watchpoints,
+            primary_sources: g
+                .primary_source_names
+                .into_iter()
+                .zip(g.primary_source_urls)
+                .map(|(name, url)| TopicSource { name, url })
+                .collect(),
+            last_updated: g
+                .last_briefed_at
+                .map(|at| at.to_rfc3339())
+                .unwrap_or_default(),
+        })
+        .collect();
+
     Ok(FlywayPage {
         categories,
         entities,
+        topics,
         days: DAYS,
     })
 }

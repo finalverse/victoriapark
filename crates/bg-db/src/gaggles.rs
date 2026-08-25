@@ -153,6 +153,80 @@ pub async fn set_stories(db: &Db, gaggle: Uuid, stories: &[StoryId]) -> Result<(
     Ok(())
 }
 
+/// Refresh every permanent topic from its language-specific anchor and signal
+/// terms. This is deliberately mechanical and cheap enough for the fast loop:
+/// the models write stories and periodic briefs, but they do not get to decide
+/// whether an already-published story visibly contains the tracked subject.
+pub async fn refresh_tracked(db: &Db) -> Result<usize> {
+    let tracked = sqlx::query(
+        "SELECT id, editorial_language, anchor_terms, keywords
+           FROM gaggles
+          WHERE pinned",
+    )
+    .fetch_all(&db.pool)
+    .await?;
+
+    for topic in &tracked {
+        let id: Uuid = topic.try_get("id")?;
+        let language: String = topic.try_get("editorial_language")?;
+        let anchors: Vec<String> = topic.try_get("anchor_terms")?;
+        let signals: Vec<String> = topic.try_get("keywords")?;
+
+        let rows = sqlx::query(
+            "SELECT s.id
+               FROM stories s
+              WHERE s.status = 'published'
+                AND s.editorial_language = $1
+                AND EXISTS (
+                    SELECT 1 FROM unnest($2::text[]) term
+                     WHERE concat_ws(' ', s.title, s.summary) ILIKE '%' || term || '%'
+                )
+                AND EXISTS (
+                    SELECT 1 FROM unnest($3::text[]) term
+                     WHERE concat_ws(' ', s.title, s.summary) ILIKE '%' || term || '%'
+                )
+              ORDER BY s.published_at DESC
+              LIMIT 200",
+        )
+        .bind(&language)
+        .bind(&anchors)
+        .bind(&signals)
+        .fetch_all(&db.pool)
+        .await?;
+        let story_ids: Vec<StoryId> = rows
+            .iter()
+            .map(|r| r.try_get::<Uuid, _>("id").map(StoryId::from_uuid))
+            .collect::<std::result::Result<_, _>>()?;
+        set_stories(db, id, &story_ids).await?;
+
+        let ids: Vec<Uuid> = story_ids.iter().map(|s| s.into_uuid()).collect();
+        let source_count = if ids.is_empty() {
+            0i64
+        } else {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(DISTINCT r.source_id)
+                   FROM story_items si
+                   JOIN raw_items r ON r.id = si.raw_item_id
+                  WHERE si.story_id = ANY($1)",
+            )
+            .bind(&ids)
+            .fetch_one(&db.pool)
+            .await?
+        };
+        sqlx::query(
+            "UPDATE gaggles
+                SET source_count = $2, story_count = $3, last_hot_at = now()
+              WHERE id = $1",
+        )
+        .bind(id)
+        .bind(source_count as i32)
+        .bind(story_ids.len() as i32)
+        .execute(&db.pool)
+        .await?;
+    }
+    Ok(tracked.len())
+}
+
 /// Whether we already have a gaggle for this topic.
 pub async fn exists(db: &Db, topic: &str) -> Result<bool> {
     Ok(
@@ -174,6 +248,13 @@ pub struct GaggleRow {
     pub source_count: i32,
     pub story_count: i32,
     pub model: Option<String>,
+    pub editorial_language: String,
+    pub pinned: bool,
+    pub analysis_md: String,
+    pub watchpoints: Vec<String>,
+    pub primary_source_names: Vec<String>,
+    pub primary_source_urls: Vec<String>,
+    pub last_briefed_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 fn row(r: &sqlx::postgres::PgRow) -> Result<GaggleRow> {
@@ -185,10 +266,19 @@ fn row(r: &sqlx::postgres::PgRow) -> Result<GaggleRow> {
         source_count: r.try_get("source_count")?,
         story_count: r.try_get("story_count")?,
         model: r.try_get("model")?,
+        editorial_language: r.try_get("editorial_language")?,
+        pinned: r.try_get("pinned")?,
+        analysis_md: r.try_get("analysis_md")?,
+        watchpoints: r.try_get("watchpoints")?,
+        primary_source_names: r.try_get("primary_source_names")?,
+        primary_source_urls: r.try_get("primary_source_urls")?,
+        last_briefed_at: r.try_get("last_briefed_at")?,
     })
 }
 
-const COLS: &str = "topic, slug, title, standfirst, source_count, story_count, model";
+const COLS: &str = "topic, slug, title, standfirst, source_count, story_count, model, \
+                   editorial_language, pinned, analysis_md, watchpoints, \
+                   primary_source_names, primary_source_urls, last_briefed_at";
 
 /// Gaggles still being covered, hottest first.
 ///
@@ -198,7 +288,7 @@ const COLS: &str = "topic, slug, title, standfirst, source_count, story_count, m
 pub async fn live(db: &Db, within_hours: i64, limit: i64) -> Result<Vec<GaggleRow>> {
     let rows = crate::sql(format!(
         "SELECT {COLS} FROM gaggles
-          WHERE last_hot_at > now() - make_interval(hours => $1)
+          WHERE pinned OR last_hot_at > now() - make_interval(hours => $1)
           -- Heat, not size. Ordering by source_count alone meant a subject that
           -- once drew nine outlets outranked one drawing six an hour ago for as
           -- long as it kept qualifying at all, so the Special Topics row showed
@@ -206,7 +296,8 @@ pub async fn live(db: &Db, within_hours: i64, limit: i64) -> Result<Vec<GaggleRo
           -- A twelve-hour half-life puts a fresh convergence in front of a
           -- stale one without letting a single-outlet flurry displace a story
           -- the whole press is covering.
-          ORDER BY source_count
+          ORDER BY pinned DESC,
+                   source_count
                    * exp(-extract(epoch from (now() - last_hot_at)) / 43200.0)
                    DESC,
                    story_count DESC
@@ -229,14 +320,25 @@ pub async fn live_for_language(
     limit: i64,
 ) -> Result<Vec<GaggleRow>> {
     let rows = crate::sql(format!(
-        "SELECT DISTINCT {COLS}, g.last_hot_at
+        "SELECT {COLS}, g.last_hot_at
            FROM gaggles g
-           JOIN gaggle_stories gs ON gs.gaggle_id = g.id
-           JOIN stories s ON s.id = gs.story_id
-          WHERE g.last_hot_at > now() - make_interval(hours => $1)
-            AND s.status = 'published'
-            AND s.editorial_language = $2
-          ORDER BY g.last_hot_at DESC, g.source_count DESC, g.story_count DESC
+          WHERE (
+                (g.pinned AND g.editorial_language = $2)
+                OR (
+                    NOT g.pinned
+                    AND g.last_hot_at > now() - make_interval(hours => $1)
+                    AND EXISTS (
+                        SELECT 1
+                          FROM gaggle_stories gs
+                          JOIN stories s ON s.id = gs.story_id
+                         WHERE gs.gaggle_id = g.id
+                           AND s.status = 'published'
+                           AND s.editorial_language = $2
+                    )
+                )
+          )
+          ORDER BY g.pinned DESC, g.last_hot_at DESC,
+                   g.source_count DESC, g.story_count DESC
           LIMIT $3"
     ))
     .bind(within_hours as i32)
@@ -247,25 +349,37 @@ pub async fn live_for_language(
     rows.iter().map(row).collect()
 }
 
-pub async fn by_slug(db: &Db, slug: &str) -> Result<Option<GaggleRow>> {
-    let r = crate::sql(format!("SELECT {COLS} FROM gaggles WHERE slug = $1"))
-        .bind(slug)
-        .fetch_optional(&db.pool)
-        .await?;
+pub async fn by_slug(
+    db: &Db,
+    slug: &str,
+    language: EditorialLanguage,
+) -> Result<Option<GaggleRow>> {
+    let r = crate::sql(format!(
+        "SELECT {COLS} FROM gaggles
+          WHERE slug = $1 AND editorial_language = $2"
+    ))
+    .bind(slug)
+    .bind(language.as_str())
+    .fetch_optional(&db.pool)
+    .await?;
     r.as_ref().map(row).transpose()
 }
 
 /// The stories on a gaggle's page.
-pub async fn story_ids(db: &Db, slug: &str) -> Result<Vec<StoryId>> {
+pub async fn story_ids(db: &Db, slug: &str, language: EditorialLanguage) -> Result<Vec<StoryId>> {
     let rows = sqlx::query(
         "SELECT gs.story_id
            FROM gaggle_stories gs
            JOIN gaggles g ON g.id = gs.gaggle_id
            JOIN stories s ON s.id = gs.story_id
-          WHERE g.slug = $1 AND s.status = 'published'
+          WHERE g.slug = $1
+            AND g.editorial_language = $2
+            AND s.status = 'published'
+            AND s.editorial_language = $2
           ORDER BY s.published_at DESC",
     )
     .bind(slug)
+    .bind(language.as_str())
     .fetch_all(&db.pool)
     .await?;
     rows.iter()
@@ -323,7 +437,8 @@ pub async fn cold(db: &Db, hours: i64) -> Result<Vec<(uuid::Uuid, String, i64)>>
         "SELECT id, title,
                 extract(epoch from (now() - last_hot_at)) / 3600.0
            FROM gaggles
-          WHERE last_hot_at < now() - make_interval(hours => $1::int)
+          WHERE NOT pinned
+            AND last_hot_at < now() - make_interval(hours => $1::int)
           ORDER BY last_hot_at ASC",
     )
     .bind(hours)
@@ -333,4 +448,82 @@ pub async fn cold(db: &Db, hours: i64) -> Result<Vec<(uuid::Uuid, String, i64)>>
         .into_iter()
         .map(|(id, title, h)| (id, title, h.unwrap_or_default() as i64))
         .collect())
+}
+
+/// A permanent topic whose editorial brief is due for synthesis.
+#[derive(Debug, Clone)]
+pub struct TrackedBrief {
+    pub id: Uuid,
+    pub slug: String,
+    pub title: String,
+    pub standfirst: String,
+    pub analysis_md: String,
+    pub watchpoints: Vec<String>,
+    pub editorial_language: EditorialLanguage,
+    pub primary_source_names: Vec<String>,
+    pub primary_source_urls: Vec<String>,
+}
+
+/// Permanent topics are re-synthesised on an editorial cadence. Their story
+/// list still refreshes in the fast loop; prose does not need rewriting every
+/// ninety seconds when no evidence has changed.
+pub async fn tracked_due(db: &Db, hours: i64, limit: i64) -> Result<Vec<TrackedBrief>> {
+    use std::str::FromStr;
+    let rows = sqlx::query(
+        "SELECT id, slug, title, standfirst, analysis_md, watchpoints,
+                editorial_language, primary_source_names, primary_source_urls
+           FROM gaggles
+          WHERE pinned
+            AND (last_briefed_at IS NULL
+                 OR last_briefed_at < now() - make_interval(hours => $1::int))
+          ORDER BY last_briefed_at ASC NULLS FIRST
+          LIMIT $2",
+    )
+    .bind(hours)
+    .bind(limit)
+    .fetch_all(&db.pool)
+    .await?;
+    rows.iter()
+        .map(|r| {
+            let language: String = r.try_get("editorial_language")?;
+            Ok(TrackedBrief {
+                id: r.try_get("id")?,
+                slug: r.try_get("slug")?,
+                title: r.try_get("title")?,
+                standfirst: r.try_get("standfirst")?,
+                analysis_md: r.try_get("analysis_md")?,
+                watchpoints: r.try_get("watchpoints")?,
+                editorial_language: EditorialLanguage::from_str(&language)
+                    .unwrap_or(EditorialLanguage::En),
+                primary_source_names: r.try_get("primary_source_names")?,
+                primary_source_urls: r.try_get("primary_source_urls")?,
+            })
+        })
+        .collect()
+}
+
+pub async fn update_tracked_brief(
+    db: &Db,
+    id: Uuid,
+    standfirst: &str,
+    analysis_md: &str,
+    watchpoints: &[String],
+    model: &str,
+    run: RunId,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE gaggles
+            SET standfirst = $2, analysis_md = $3, watchpoints = $4,
+                model = $5, run_id = $6, last_briefed_at = now()
+          WHERE id = $1 AND pinned",
+    )
+    .bind(id)
+    .bind(standfirst)
+    .bind(analysis_md)
+    .bind(watchpoints)
+    .bind(model)
+    .bind(run.into_uuid())
+    .execute(&db.pool)
+    .await?;
+    Ok(())
 }

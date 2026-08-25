@@ -103,6 +103,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/wire") view=pages::Wire />
                     <Route path=path!("/en/wire") view=pages::WireEn />
                     <Route path=path!("/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />
+                    <Route path=path!("/en/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />
                     <Route path=path!("/desk") view=pages::Desk />
                     <Route path=path!("/en/desk") view=pages::DeskEn />
                     <Route path=path!("/section/:category") view=pages::Section />
@@ -123,6 +124,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/prices") view=pages::Prices />
                     <Route path=path!("/asset/:ticker") view=pages::Asset />
                     <Route path=path!("/flyway") view=pages::Flyway />
+                    <Route path=path!("/en/flyway") view=pages::FlywayEn />
                     <Route path=path!("/standards") view=pages::Standards />
                     <Route path=path!("/developers") view=pages::Developers />
                 </Routes>

@@ -139,6 +139,61 @@ pub const SOURCES: &[SeedSource] = &[
         poll_interval_s: 300,
         beat: Some(Beat::World),
     },
+    // ---- Primary government and statistical wires ----------------------
+    // These are the backbone of the U.S.–Canada trade tracker and useful well
+    // beyond it. They establish what a government actually ordered and what
+    // the data actually show; editorial claims are still checked against
+    // independent reporting downstream.
+    SeedSource {
+        slug: "whitehouse-presidential-actions",
+        name: "The White House · Presidential Actions",
+        kind: SourceKind::Rss,
+        url: "https://www.whitehouse.gov/presidential-actions/feed/",
+        homepage: "https://www.whitehouse.gov/presidential-actions/",
+        trust: 92,
+        poll_interval_s: 180,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "canada-finance",
+        name: "Department of Finance Canada",
+        kind: SourceKind::Rss,
+        url: "https://api.io.canada.ca/io-server/gc/news/en/v2?dept=departmentfinance&sort=publishedDate&orderBy=desc&publishedDate%3E=2025-01-01&pick=50&format=atom&atomtitle=Department%20of%20Finance%20Canada",
+        homepage: "https://www.canada.ca/en/department-finance.html",
+        trust: 92,
+        poll_interval_s: 180,
+        beat: Some(Beat::Markets),
+    },
+    SeedSource {
+        slug: "canada-global-affairs",
+        name: "Global Affairs Canada",
+        kind: SourceKind::Rss,
+        url: "https://api.io.canada.ca/io-server/gc/news/en/v2?dept=departmentofforeignaffairstradeanddevelopment&sort=publishedDate&orderBy=desc&publishedDate%3E=2025-01-01&pick=50&format=atom&atomtitle=Global%20Affairs%20Canada",
+        homepage: "https://www.international.gc.ca/",
+        trust: 92,
+        poll_interval_s: 180,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "statcan-international-trade",
+        name: "Statistics Canada · International Trade",
+        kind: SourceKind::Rss,
+        url: "https://www150.statcan.gc.ca/n1/rss/dai-quo/12-eng.atom",
+        homepage: "https://www.statcan.gc.ca/",
+        trust: 95,
+        poll_interval_s: 1800,
+        beat: Some(Beat::Markets),
+    },
+    SeedSource {
+        slug: "ustr",
+        name: "Office of the U.S. Trade Representative",
+        kind: SourceKind::Html,
+        url: "https://ustr.gov/about-us/policy-offices/press-office/press-releases",
+        homepage: "https://ustr.gov/",
+        trust: 92,
+        poll_interval_s: 300,
+        beat: Some(Beat::World),
+    },
     // ---- Aggregators: what is actually hot right now ---------------------
     //
     // Every source above is one publisher's judgement of what matters. None of

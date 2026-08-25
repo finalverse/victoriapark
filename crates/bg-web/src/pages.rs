@@ -5,7 +5,7 @@ use crate::model::*;
 use crate::ui::*;
 use leptos::prelude::*;
 use leptos_meta::{Link, Title};
-use leptos_router::hooks::use_params_map;
+use leptos_router::hooks::{use_location, use_params_map};
 
 /// Load a resource and render it, with loading and empty states handled once.
 macro_rules! loaded {
@@ -250,11 +250,20 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                                     .into_iter()
                                     .map(|g| {
                                         view! {
-                                            <a class="gaggle-chip" href=format!("/gaggle/{}", g.slug)>
+                                            <a class="gaggle-chip" href=if english {
+                                                format!("/en/gaggle/{}", g.slug)
+                                            } else {
+                                                format!("/gaggle/{}", g.slug)
+                                            }>
                                                 <span class="gaggle-chip-title">{g.title.clone()}</span>
                                                 <span class="gaggle-chip-meta">
-                                                    {g.sources}
-                                                    " outlets"
+                                                    {if g.pinned {
+                                                        if english { "LIVE".to_string() } else { "持续追踪".to_string() }
+                                                    } else if english {
+                                                        format!("{} outlets", g.sources)
+                                                    } else {
+                                                        format!("{} 家来源", g.sources)
+                                                    }}
                                                 </span>
                                             </a>
                                         }
@@ -533,9 +542,20 @@ fn DeskEdition(language: &'static str) -> impl IntoView {
 #[component]
 pub fn Gaggle() -> impl IntoView {
     let params = use_params_map();
+    let location = use_location();
     let data = Resource::new(
-        move || params.read().get("slug").unwrap_or_default(),
-        get_gaggle,
+        move || {
+            let language = if location.pathname.get().starts_with("/en/") {
+                "en"
+            } else {
+                "zh"
+            };
+            (
+                params.read().get("slug").unwrap_or_default(),
+                language.to_string(),
+            )
+        },
+        |(slug, language)| get_gaggle(slug, language),
     );
     view! {
         {loaded!(
@@ -553,40 +573,97 @@ pub fn Gaggle() -> impl IntoView {
                     let c = g.card.clone();
                     let stories = g.stories.clone();
                     let has_model = !c.model.is_empty();
+                    let english = c.language == "en";
+                    let topic_path = if english {
+                        format!("/en/gaggle/{}", c.slug)
+                    } else {
+                        format!("/gaggle/{}", c.slug)
+                    };
                     view! {
                         <Title text=format!("{} — VictoriaPark", c.title) />
                         <ShareMeta
                             title=c.title.clone()
                             description=c.standfirst.clone()
-                            url=format!("https://{}/gaggle/{}", bg_core::brand::DOMAIN, c.slug)
+                            url=format!("https://{}{}", bg_core::brand::DOMAIN, topic_path)
                         />
                         <div class="shell page">
                             <div class="gaggle-head">
-                                <span class="gaggle-tag">"Special topic"</span>
+                                <span class="gaggle-tag">{if english { "Special topic" } else { "新闻专题" }}</span>
                                 <h1>{c.title.clone()}</h1>
                                 <p class="lede">{c.standfirst.clone()}</p>
                                 // The argument for the page existing, stated
                                 // rather than implied.
                                 <p class="gaggle-why">
-                                    "Opened because "
-                                    <strong>{c.sources}</strong>
-                                    " independent outlets covered this within two days. "
-                                    {stories.len()}
-                                    " stories collected."
+                                    {if c.pinned {
+                                        if english {
+                                            "Permanent watch · continuously refreshed from first-party and independent sources. ".to_string()
+                                        } else {
+                                            "长期追踪 · 持续汇入一手文件与独立报道。 ".to_string()
+                                        }
+                                    } else if english {
+                                        format!("Opened after {} independent outlets converged within two days. ", c.sources)
+                                    } else {
+                                        format!("因两日内 {} 家独立来源集中报道而建立。 ", c.sources)
+                                    }}
+                                    {if english {
+                                        format!("{} VictoriaPark stories collected.", stories.len())
+                                    } else {
+                                        format!("已收录 {} 篇 VictoriaPark 报道。", stories.len())
+                                    }}
                                     {has_model
                                         .then(|| {
                                             view! {
                                                 <span class="gaggle-model">
-                                                    " · Framed by "
+                                                    {if english { " · Briefed by " } else { " · 简报模型：" }}
                                                     {c.model.clone()}
                                                 </span>
                                             }
                                         })}
                                 </p>
                             </div>
+                            {(!c.analysis_html.is_empty())
+                                .then(|| {
+                                    let analysis = c.analysis_html.clone();
+                                    let watch = c.watchpoints.clone();
+                                    let sources = c.primary_sources.clone();
+                                    view! {
+                                        <div class="topic-grid">
+                                            <article class="prose topic-brief" inner_html=analysis></article>
+                                            <aside class="topic-rail">
+                                                <div class="topic-rail-block">
+                                                    <div class="rail-title">
+                                                        <span>{if english { "What to watch" } else { "接下来观察" }}</span>
+                                                    </div>
+                                                    <ul class="topic-watchlist">
+                                                        {watch.into_iter().map(|w| view! { <li>{w}</li> }).collect_view()}
+                                                    </ul>
+                                                </div>
+                                                <div class="topic-rail-block">
+                                                    <div class="rail-title">
+                                                        <span>{if english { "Primary record" } else { "一手文件" }}</span>
+                                                    </div>
+                                                    <ol class="topic-sources">
+                                                        {sources
+                                                            .into_iter()
+                                                            .map(|s| view! {
+                                                                <li><a class="out" href=s.url rel="noopener noreferrer">{s.name}</a></li>
+                                                            })
+                                                            .collect_view()}
+                                                    </ol>
+                                                </div>
+                                            </aside>
+                                        </div>
+                                    }
+                                })}
+                            <div class="topic-story-head">
+                                <h2>{if english { "Latest coverage" } else { "最新报道" }}</h2>
+                            </div>
                             {if stories.is_empty() {
                                 view! {
-                                    <Empty message="Nothing published on this yet." hint="" />
+                                    <Empty
+                                        message=if english { "The live brief is open; related reporting is entering the pipeline." } else { "专题简报已上线，相关报道正在进入编辑流程。" }
+                                        hint=""
+                                    />
                                 }
                                     .into_any()
                             } else {
@@ -1468,21 +1545,35 @@ pub fn Asset() -> impl IntoView {
 
 #[component]
 pub fn Flyway() -> impl IntoView {
-    let data = Resource::new(|| (), |_| get_flyway());
+    FlywayEdition(FlywayEditionProps { language: "zh" })
+}
+
+#[component]
+pub fn FlywayEn() -> impl IntoView {
+    FlywayEdition(FlywayEditionProps { language: "en" })
+}
+
+#[component]
+fn FlywayEdition(language: &'static str) -> impl IntoView {
+    let english = language == "en";
+    let data = Resource::new(move || language, |lang| get_flyway(lang.to_string()));
     view! {
-        <Title text="Flyway — VictoriaPark" />
+        <Title text=if english { "Topics — VictoriaPark" } else { "新闻专题 — VictoriaPark" } />
         <div class="shell page">
             <div class="page-head">
-                <h1>"Flyway"</h1>
+                <h1>{if english { "Topics" } else { "新闻专题" }}</h1>
                 <p class="lede">
-                    "Which stories are migrating up. Coverage volume by desk over the last two
-                     weeks, and the names showing up most often."
+                    {if english {
+                        "Persistent investigations and subjects drawing convergent coverage, followed by the newsroom’s two-week trend map."
+                    } else {
+                        "长期追踪的重要议题、正在形成报道聚合的专题，以及编辑部最近两周的新闻热度图。"
+                    }}
                 </p>
             </div>
             {loaded!(
                 data,
                 |f| {
-                    if f.categories.is_empty() {
+                    if f.categories.is_empty() && f.topics.is_empty() {
                         view! {
                             <Empty message="Not enough published history yet." hint="bg run" />
                         }
@@ -1490,7 +1581,32 @@ pub fn Flyway() -> impl IntoView {
                     } else {
                         let cats = f.categories.clone();
                         let ents = f.entities.clone();
+                        let topics = f.topics.clone();
                         view! {
+                            {(!topics.is_empty()).then(|| view! {
+                                <section class="topic-index">
+                                    <div class="rail-title">
+                                        <span>{if english { "Active special topics" } else { "正在追踪" }}</span>
+                                    </div>
+                                    <div class="topic-index-grid">
+                                        {topics.into_iter().map(|t| {
+                                            let href = if english {
+                                                format!("/en/gaggle/{}", t.slug)
+                                            } else {
+                                                format!("/gaggle/{}", t.slug)
+                                            };
+                                            view! {
+                                                <a class="topic-index-card" href=href>
+                                                    <span class="gaggle-tag">{if t.pinned { if english { "LIVE" } else { "长期追踪" } } else { if english { "TREND" } else { "热点" } }}</span>
+                                                    <h2>{t.title}</h2>
+                                                    <p>{t.standfirst}</p>
+                                                    <span class="topic-index-meta">{if english { format!("{} stories", t.stories) } else { format!("{} 篇报道", t.stories) }}</span>
+                                                </a>
+                                            }
+                                        }).collect_view()}
+                                    </div>
+                                </section>
+                            })}
                             <div class="split">
                                 <div>
                                     {cats
