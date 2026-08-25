@@ -146,19 +146,23 @@ fi
 # rustup drops a shim at that path before the toolchain finishes downloading,
 # so an interrupted install leaves a cargo that is present but unusable, and an
 # existence check would skip right past it.
-if ! sudo -u "$APP_USER" -H "$APP_HOME/.cargo/bin/cargo" --version >/dev/null 2>&1; then
+if ! sudo -u "$APP_USER" env HOME="$APP_HOME" CARGO_HOME="$APP_HOME/.cargo" RUSTUP_HOME="$APP_HOME/.rustup" "$APP_HOME/.cargo/bin/cargo" --version >/dev/null 2>&1; then
   log "installing rust toolchain for $APP_USER"
-  sudo -u "$APP_USER" -H bash -lc \
+  sudo -u "$APP_USER" env \
+    HOME="$APP_HOME" CARGO_HOME="$APP_HOME/.cargo" RUSTUP_HOME="$APP_HOME/.rustup" \
+    bash -c \
     "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path" \
     >/dev/null 2>&1 || true
   # Repair the case where rustup is present but has no default toolchain.
-  sudo -u "$APP_USER" -H "$APP_HOME/.cargo/bin/rustup" default stable >/dev/null 2>&1 || true
+  sudo -u "$APP_USER" env \
+    HOME="$APP_HOME" CARGO_HOME="$APP_HOME/.cargo" RUSTUP_HOME="$APP_HOME/.rustup" \
+    "$APP_HOME/.cargo/bin/rustup" default stable >/dev/null 2>&1 || true
 fi
-echo "    $(sudo -u "$APP_USER" -H "$APP_HOME/.cargo/bin/cargo" --version 2>&1)"
+echo "    $(sudo -u "$APP_USER" env HOME="$APP_HOME" CARGO_HOME="$APP_HOME/.cargo" RUSTUP_HOME="$APP_HOME/.rustup" "$APP_HOME/.cargo/bin/cargo" --version 2>&1)"
 
-if ! sudo -u "$APP_USER" -H "$APP_HOME/.cargo/bin/rustup" target list --installed 2>/dev/null | grep -q wasm32; then
+if ! sudo -u "$APP_USER" env HOME="$APP_HOME" CARGO_HOME="$APP_HOME/.cargo" RUSTUP_HOME="$APP_HOME/.rustup" "$APP_HOME/.cargo/bin/rustup" target list --installed 2>/dev/null | grep -q wasm32; then
   log "adding wasm32 target"
-  sudo -u "$APP_USER" -H "$APP_HOME/.cargo/bin/rustup" target add wasm32-unknown-unknown >/dev/null 2>&1
+  sudo -u "$APP_USER" env HOME="$APP_HOME" CARGO_HOME="$APP_HOME/.cargo" RUSTUP_HOME="$APP_HOME/.rustup" "$APP_HOME/.cargo/bin/rustup" target add wasm32-unknown-unknown >/dev/null 2>&1
 fi
 echo "    wasm32 target present"
 
@@ -172,7 +176,7 @@ echo "    wasm32 target present"
 # for architectures with no published asset.
 CARGO_LEPTOS_VERSION="0.3.7"
 
-if ! sudo -u "$APP_USER" -H "$APP_HOME/.cargo/bin/cargo-leptos" --version >/dev/null 2>&1; then
+if ! sudo -u "$APP_USER" env HOME="$APP_HOME" CARGO_HOME="$APP_HOME/.cargo" RUSTUP_HOME="$APP_HOME/.rustup" "$APP_HOME/.cargo/bin/cargo-leptos" --version >/dev/null 2>&1; then
   arch="$(uname -m)"
   case "$arch" in
     x86_64)  asset="cargo-leptos-x86_64-unknown-linux-gnu.tar.gz" ;;
@@ -222,6 +226,6 @@ if ! sudo -u "$APP_USER" -H "$APP_HOME/.cargo/bin/cargo-leptos" --version >/dev/
       || { echo "cargo-leptos install failed:" >&2; journalctl -u bg-leptos-install --no-pager -n 30 >&2; exit 1; }
   fi
 fi
-echo "    $(sudo -u "$APP_USER" -H "$APP_HOME/.cargo/bin/cargo-leptos" --version 2>&1 | head -1)"
+echo "    $(sudo -u "$APP_USER" env HOME="$APP_HOME" CARGO_HOME="$APP_HOME/.cargo" RUSTUP_HOME="$APP_HOME/.rustup" "$APP_HOME/.cargo/bin/cargo-leptos" --version 2>&1 | head -1)"
 
 log "provision complete"
