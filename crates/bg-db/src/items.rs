@@ -179,6 +179,7 @@ pub async fn untriaged(db: &Db, limit: i64) -> Result<Vec<RawItem>> {
     let rows = crate::sql(format!(
         "SELECT {cols} FROM (
            SELECT r.*,
+                  s.language AS source_language,
                   row_number() OVER (
                     PARTITION BY r.source_id
                     ORDER BY r.published_at DESC
@@ -191,7 +192,12 @@ pub async fn untriaged(db: &Db, limit: i64) -> Result<Vec<RawItem>> {
              JOIN sources s ON s.id = r.source_id
             WHERE NOT r.triaged AND r.aged_out_at IS NULL
          ) t
-         ORDER BY t.src_rank ASC, t.desk_rank ASC, t.published_at DESC
+         -- Chinese is the primary edition, so it receives the first share of
+         -- each finite triage budget. Source and desk interleaving still
+         -- prevents any one Chinese or English firehose from crowding out the
+         -- rest of its edition.
+         ORDER BY CASE WHEN t.source_language = 'zh' THEN 0 ELSE 1 END,
+                  t.src_rank ASC, t.desk_rank ASC, t.published_at DESC
          LIMIT $1"
     ))
     .bind(limit)
