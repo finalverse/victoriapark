@@ -1,0 +1,202 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # The WASM boundary is the single most likely way this codebase breaks: adding
+  # tokio or sqlx to bg-core compiles fine on the host and only fails when the
+  # hydrate bundle is built. Checking it first, in its own fast job, surfaces
+  # that in under a minute instead of at the end of a full build.
+  wasm-boundary:
+    name: WASM boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: bg-core must compile for wasm32
+        run: cargo build -p bg-core --target wasm32-unknown-unknown
+      - name: bg-web hydrate bundle must compile for wasm32
+        run: cargo build -p bg-web --target wasm32-unknown-unknown --lib --features hydrate --no-default-features
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: victoriapark
+          POSTGRES_PASSWORD: victoriapark
+          POSTGRES_DB: victoriapark
+        ports: ["55434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U victoriapark"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgres://victoriapark:victoriapark@127.0.0.1:55434/victoriapark
+      TEST_DATABASE_URL: postgres://victoriapark:victoriapark@127.0.0.1:55434/victoriapark_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Unit and integration tests
+        # Single-threaded: the integration tests create and drop their own
+        # scratch databases, and parallel runs would race on them.
+        shell: bash
+        run: |
+          set -o pipefail   # not on by default in Actions' bash; `tee` would eat the failure
+          cargo test --workspace -- --test-threads=1 2>&1 | tee /tmp/test.log
+          # `--workspace` does not turn on bg-web's `ssr` feature, so everything
+          # gated behind it — the share cards, the image mirror, the crawler
+          # document — had never been tested here at all. Those are precisely
+          # the parts that only run in production.
+          cargo test -p bg-web --features ssr -- --test-threads=1 2>&1 | tee -a /tmp/test.log
+
+      # Reading this repo's Actions logs requires a signed-in session. Check-run
+      # annotations are public, so on failure the tail is re-emitted as an error
+      # and becomes readable without credentials.
+      - name: Surface the failure in annotations
+        if: failure()
+        shell: bash
+        run: |
+          tail -c 4000 /tmp/test.log 2>/dev/null \
+            | python3 -c 'import sys; print("::error title=cargo test --workspace::" + sys.stdin.read().replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+
+  # The live-feed test is a monitor, not a gate, so it gets its own job and is
+  # allowed to fail. Several publishers front their feeds with Cloudflare and
+  # answer 403 to datacenter IPs; blocking merges on that would be reporting
+  # someone else's bot policy as our regression. It still runs on every push —
+  # a feed URL that has genuinely moved shows up as a warning on the run.
+  live-sources:
+    name: Live sources (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: victoriapark
+          POSTGRES_PASSWORD: victoriapark
+          POSTGRES_DB: victoriapark
+        ports: ["55434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U victoriapark"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://victoriapark:victoriapark@127.0.0.1:55434/victoriapark_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Poll every source for real
+        run: cargo test -p bg-ingest --test live_feeds -- --ignored --nocapture
+
+  lint:
+    name: Format & clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan history for credentials
+        run: |
+          set -uo pipefail
+          fail=0
+          scan() {
+            # `git grep` over every commit: a secret removed in a later commit
+            # is still in the history and still needs revoking.
+            if git grep -IEn "$2" $(git rev-list --all) -- \
+                 ':!*.githooks/*' ':!.github/workflows/ci.yml' 2>/dev/null | head -3 | grep -q .; then
+              echo "::error::possible $1 found in git history"
+              fail=1
+            fi
+          }
+          scan "GitHub token"     'gh[pousr]_[A-Za-z0-9]{30,}'
+          scan "GitHub PAT"       'github_pat_[A-Za-z0-9_]{50,}'
+          scan "Anthropic key"    'sk-ant-[A-Za-z0-9_-]{20,}'
+          scan "AWS key"          'AKIA[0-9A-Z]{16}'
+          scan "private key"      'BEGIN [A-Z ]*PRIVATE KEY'
+          # Look for a blob actually named `.env` in any tree.
+          #
+          # The obvious `git rev-list --all --objects -- .env` does NOT work:
+          # with --objects, rev-list also emits every annotated tag as
+          # "<sha> <tagname>", and the pathspec does not filter those out. So
+          # the check reported ".env is in your history" the moment the repo
+          # got its first annotated tag. Matching on the path field is both
+          # correct and stricter — it catches a nested `config/.env` too, while
+          # leaving `.env.example` alone.
+          if git rev-list --objects --all \
+               | awk '{ $1 = ""; sub(/^ /, ""); if ($0 ~ /(^|\/)\.env$/) found = 1 }
+                      END { exit !found }'; then
+            echo "::error::a file named .env is committed somewhere in git history"
+            fail=1
+          fi
+          exit $fail
+
+  # ---------------------------------------------------------------------------
+  # Tell somebody.
+  #
+  # CI was red on every push to main for eleven consecutive releases and nobody
+  # noticed, because the release workflow — the one being watched — was green
+  # the whole time. A failing check that reaches no one is not a check.
+  #
+  # This opens a GitHub issue, which mails everyone watching the repository. It
+  # deliberately uses no external mail service: an alert that depends on a
+  # secret stops working the day the secret rotates, and this one only needs
+  # the token every run already has.
+  #
+  # One issue, reused. A comment per failure keeps the history in a single
+  # thread instead of filing a fresh issue every push, which would be its own
+  # kind of unread.
+  #
+  # `live-sources` is not in `needs`: it polls real publishers, it is allowed to
+  # fail when Reddit answers 429, and paging a human for that is how people
+  # learn to ignore the alerts that matter.
+  notify:
+    name: Report failure
+    runs-on: ubuntu-latest
+    needs: [wasm-boundary, test, lint, secrets]
+    if: failure() && github.ref == 'refs/heads/main'
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the CI failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          title="CI is failing on main"
+          body=$(printf 'CI failed on `%s`.\n\n%s\n\nFailing jobs are listed in the run. Reproduce everything CI checks with:\n\n```\n./scripts/check.sh\n```\n' "${SHA:0:12}" "$RUN_URL")
+          existing=$(gh issue list --label ci-failure --state open --limit 1 --json number -q '.[0].number' || true)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+            echo "commented on #$existing"
+          else
+            gh label create ci-failure --color b60205 --description "CI red on main" 2>/dev/null || true
+            gh issue create --title "$title" --label ci-failure --body "$body"
+          fi

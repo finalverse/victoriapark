@@ -1,0 +1,141 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/bg-core",
+    "crates/bg-db",
+    "crates/bg-llm",
+    "crates/bg-ingest",
+    "crates/bg-agents",
+    "crates/bg-api",
+    "crates/bg-cli",
+    "crates/bg-web",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+license = "MIT"
+authors = ["VictoriaPark"]
+repository = "https://victoriapark.io"
+
+[workspace.dependencies]
+# --- internal ---
+bg-core = { path = "crates/bg-core" }
+bg-db = { path = "crates/bg-db" }
+bg-llm = { path = "crates/bg-llm" }
+bg-ingest = { path = "crates/bg-ingest" }
+bg-agents = { path = "crates/bg-agents" }
+bg-api = { path = "crates/bg-api" }
+
+# --- wasm-safe core deps (usable from bg-core) ---
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock", "std"] }
+uuid = { version = "1", features = ["serde", "v4", "js"] }
+thiserror = "2"
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+
+# --- server-side only ---
+tokio = { version = "1.53.1", features = ["full"] }
+axum = { version = "0.8.9", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.7.0", features = ["fs", "trace", "cors", "compression-gzip"] }
+sqlx = { version = "0.9.0", default-features = false, features = [
+    "runtime-tokio", "tls-rustls-ring", "postgres", "chrono", "uuid", "json", "macros", "migrate", "rust_decimal",
+] }
+# reqwest 0.13 renamed the `rustls-tls` feature to `rustls`.
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls", "gzip", "stream", "http2", "charset"] }
+feed-rs = "2.4.0"
+scraper = "0.27.0"
+# Renders the generated share cards. Pure Rust, no system image libraries, and
+# it re-exports usvg/tiny-skia so this is the only dependency needed.
+resvg = "0.48.1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt"] }
+clap = { version = "4", features = ["derive", "env"] }
+dotenvy = "0.15"
+async-trait = "0.1"
+futures = "0.3"
+sha2 = "0.10"
+url = "2"
+regex = "1"
+rand = "0.9"
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+
+# --- leptos ---
+leptos = { version = "0.8.20" }
+leptos_axum = { version = "0.8.10" }
+leptos_meta = { version = "0.8.6" }
+leptos_router = { version = "0.8.15" }
+wasm-bindgen = "0.2.106"
+# web-sys gates every browser API behind its own feature, and Leptos enables
+# only the set it needs. These two are ours: the theme toggle reads the OS
+# preference and remembers an explicit choice.
+web-sys = { version = "0.3", features = [
+    "MediaQueryList",
+    "Storage",
+    # Share controls: Navigator is the gateway to both, Clipboard backs "copy
+    # link", and ShareData/navigator.share is the only route from a mobile
+    # browser into WeChat — that platform has no share URL to link to.
+    "Navigator",
+    "Clipboard",
+    "ShareData",
+] }
+console_error_panic_hook = "0.1"
+
+# Debug builds of bg-web were producing 2.2 GB *individual* codegen-unit object
+# files — 223 GB of target/debug across a few stale build hashes. Nearly all of
+# it is DWARF for the Leptos macro expansion plus every monomorphised
+# dependency, and none of it is useful without a debugger attached.
+#
+# `line-tables-only` keeps what backtraces actually need (file and line) and
+# drops the type and variable descriptions that account for the bulk. Set it
+# back to `true` if you need to step through in a debugger.
+[profile.dev]
+debug = "line-tables-only"
+
+# Dependencies are not what anyone steps through, and they are most of the
+# volume.
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+# cargo-leptos drives the bg-web package
+[[workspace.metadata.leptos]]
+name = "victoriapark"
+bin-package = "bg-web"
+lib-package = "bg-web"
+output-name = "victoriapark"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+# Content-address the bundles. Without this cargo-leptos emits fixed names
+# (victoriapark.css/.js/.wasm), so nginx had to choose between caching a mutable URL
+# — which left every returning reader on the previous release's stylesheet for a
+# day — and revalidating on each page view, which this host's uplink cannot
+# afford because the app answers conditional requests with a full 1.2MB body.
+# Hashed filenames make the choice unnecessary: the URL changes when the content
+# does, so it can be cached hard and forever.
+hash-files = true
+style-file = "style/main.scss"
+assets-dir = "public"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+browserquery = "defaults"
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
+lib-profile-release = "wasm-release"

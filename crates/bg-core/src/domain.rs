@@ -1,0 +1,1177 @@
+//! The VictoriaPark domain model.
+//!
+//! Enums are serialized as lowercase strings rather than integers: they cross
+//! into Postgres columns, JSON API responses, MCP tool output and LLM prompts,
+//! and in every one of those a readable token beats an opaque ordinal.
+
+use crate::ids::*;
+use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use std::fmt;
+
+/// Generates `as_str`, `Display`, `FromStr`, `ALL` and serde string
+/// (de)serialization for a C-like enum.
+macro_rules! str_enum {
+    (
+        $(#[$meta:meta])*
+        $vis:vis enum $name:ident {
+            $( $(#[$vmeta:meta])* $variant:ident => $lit:literal ),+ $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+        #[serde(rename_all = "snake_case")]
+        $vis enum $name {
+            $( $(#[$vmeta])* $variant ),+
+        }
+
+        impl $name {
+            pub const ALL: &'static [$name] = &[ $( $name::$variant ),+ ];
+
+            pub const fn as_str(&self) -> &'static str {
+                match self { $( $name::$variant => $lit ),+ }
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+
+        impl std::str::FromStr for $name {
+            type Err = crate::error::CoreError;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $( $lit => Ok($name::$variant), )+
+                    other => Err(crate::error::CoreError::parse(stringify!($name), other)),
+                }
+            }
+        }
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Sources & raw ingestion
+// ---------------------------------------------------------------------------
+
+str_enum! {
+    /// How a source is polled.
+    pub enum SourceKind {
+        Rss => "rss",
+        /// A site read by crawling its index page. No feed involved — see
+        /// `bg-ingest::crawl`. The kind exists so the poller knows which
+        /// mechanism to use; downstream, its items are ordinary items.
+        Html => "html",
+        JsonApi => "json_api",
+        /// Regulatory filings (SEC EDGAR, court dockets).
+        Filing => "filing",
+        /// Chain data — large transfers, contract deploys, governance votes.
+        Onchain => "onchain",
+        Social => "social",
+        /// Mainstream financial press. Ingested only when an item is
+        /// crypto-relevant — their feeds are mostly equities and rates, and
+        /// taking them wholesale would bury the coverage we want.
+        Finance => "finance",
+        /// A preprint server. A paper is not a news item — it has authors, an
+        /// abstract and no editor — so it gets its own kind and its own card.
+        Research => "research",
+        /// Hacker News, Reddit. Discussion rather than reporting: the signal is
+        /// that practitioners are arguing about something. Never corroboration.
+        Forum => "forum",
+        /// A channel that syndicates video (YouTube channel feeds today).
+        /// Entries carry a provider video id and are embedded, never rehosted.
+        Video => "video",
+        /// First-party press releases. Treated as interested parties, never as
+        /// corroboration for a claim they are the subject of.
+        Wire => "wire",
+    }
+}
+
+str_enum! {
+    /// Editorial sections. Deliberately narrower than Decrypt's twelve — a
+    /// section nobody files to is dead weight in the nav.
+    /// Which desk a story belongs to.
+    ///
+    /// VictoriaPark started as a crypto property and is now a frontier-technology
+    /// newsroom whose primary beat is AI. Beat is kept separate from
+    /// [`Category`] because they are genuinely orthogonal: "policy" means the
+    /// EU AI Act on one desk and a stablecoin bill on the other, and a reader
+    /// who wants one rarely wants the other. Collapsing them into a single flat
+    /// list would force a choice between losing the section or duplicating it.
+    pub enum Beat {
+        Ai => "ai",
+        Crypto => "crypto",
+        /// Capital markets: equities, rates, macro, earnings, funds.
+        Markets => "markets",
+        /// The rest of high technology: chips, platforms, biotech, energy —
+        /// the frontier that is neither a model nor a token.
+        Tech => "tech",
+        /// Politics, conflict, diplomacy, elections. The events that set the
+        /// conditions every other desk reports inside of.
+        World => "world",
+        /// Discovery outside the model labs: space, climate, medicine, physics.
+        Science => "science",
+        /// Media, entertainment, sport — what people are actually talking
+        /// about, which is not always what a markets desk considers news.
+        Culture => "culture",
+    }
+}
+
+str_enum! {
+    pub enum Category {
+        Markets => "markets",
+        Policy => "policy",
+        Tech => "tech",
+        Defi => "defi",
+        Business => "business",
+        Security => "security",
+        Ai => "ai",
+        Nft => "nft",
+        Gaming => "gaming",
+        Culture => "culture",
+        /// Published research — papers, benchmarks, evaluations.
+        Research => "research",
+        /// A model or system shipping: weights, APIs, capability jumps.
+        Models => "models",
+        /// The physical layer — chips, datacentres, energy, supply.
+        Compute => "compute",
+        /// Alignment, evaluations, misuse, incidents.
+        Safety => "safety",
+        /// Conflict, diplomacy, borders, international institutions.
+        World => "world",
+        /// Elections, legislatures, courts, campaigns.
+        Politics => "politics",
+        /// Medicine, public health, biotech, drugs.
+        Health => "health",
+        /// Emissions, weather, energy transition, environment.
+        Climate => "climate",
+        /// Launches, missions, astronomy, the space economy.
+        Space => "space",
+        /// Discovery outside computing — physics, biology, materials.
+        Science => "science",
+        /// Competition, leagues, athletes.
+        Sports => "sports",
+        /// Film, television, music, games as culture, celebrity.
+        Entertainment => "entertainment",
+        /// Oil, gas, grid, nuclear, renewables.
+        Energy => "energy",
+    }
+}
+
+impl Category {
+    /// Display label for nav and chips.
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Markets => "Markets",
+            Self::Policy => "Policy",
+            Self::Tech => "Tech",
+            Self::Defi => "DeFi",
+            Self::Business => "Business",
+            Self::Security => "Security",
+            Self::Ai => "AI",
+            Self::Nft => "NFTs",
+            Self::Gaming => "Gaming",
+            Self::Culture => "Culture",
+            Self::Research => "Research",
+            Self::Models => "Models",
+            Self::Compute => "Compute",
+            Self::Safety => "Safety",
+            Self::World => "World",
+            Self::Politics => "Politics",
+            Self::Health => "Health",
+            Self::Climate => "Climate",
+            Self::Space => "Space",
+            Self::Science => "Science",
+            Self::Sports => "Sport",
+            Self::Entertainment => "Entertainment",
+            Self::Energy => "Energy",
+        }
+    }
+
+    pub const fn label_zh(&self) -> &'static str {
+        match self {
+            Self::Markets => "市场",
+            Self::Policy => "政策",
+            Self::Tech => "科技",
+            Self::Defi => "去中心化金融",
+            Self::Business => "商业",
+            Self::Security => "安全",
+            Self::Ai => "人工智能",
+            Self::Nft => "数字藏品",
+            Self::Gaming => "游戏",
+            Self::Culture => "文化",
+            Self::Research => "研究",
+            Self::Models => "模型",
+            Self::Compute => "算力",
+            Self::Safety => "AI 安全",
+            Self::World => "国际",
+            Self::Politics => "政治",
+            Self::Health => "健康",
+            Self::Climate => "气候",
+            Self::Space => "太空",
+            Self::Science => "科学",
+            Self::Sports => "体育",
+            Self::Entertainment => "文娱",
+            Self::Energy => "能源",
+        }
+    }
+}
+
+impl Category {
+    /// The categories that make sense on one desk.
+    ///
+    /// Triage picks from this rather than from all fourteen. Halving the choice
+    /// space measurably helps a small model, and it makes whole classes of
+    /// error unrepresentable: an AI story cannot come back tagged "defi", and a
+    /// crypto story cannot come back tagged "compute".
+    pub const fn for_beat(beat: Beat) -> &'static [Category] {
+        match beat {
+            Beat::Ai => &[
+                Category::Models,
+                Category::Research,
+                Category::Compute,
+                Category::Safety,
+                Category::Policy,
+                Category::Business,
+                Category::Security,
+                Category::Culture,
+            ],
+            Beat::Crypto => &[
+                Category::Markets,
+                Category::Defi,
+                Category::Policy,
+                Category::Business,
+                Category::Security,
+                Category::Tech,
+                Category::Nft,
+                Category::Gaming,
+                Category::Culture,
+            ],
+            Beat::Markets => &[
+                Category::Markets,
+                Category::Business,
+                Category::Policy,
+                Category::Tech,
+                Category::Culture,
+            ],
+            Beat::Tech => &[
+                Category::Tech,
+                Category::Compute,
+                Category::Business,
+                Category::Policy,
+                Category::Security,
+                Category::Energy,
+                Category::Gaming,
+                Category::Culture,
+            ],
+            Beat::World => &[
+                Category::World,
+                Category::Politics,
+                Category::Policy,
+                Category::Business,
+                Category::Energy,
+                Category::Culture,
+            ],
+            Beat::Science => &[
+                Category::Science,
+                Category::Space,
+                Category::Health,
+                Category::Climate,
+                Category::Energy,
+                Category::Research,
+                Category::Policy,
+            ],
+            Beat::Culture => &[
+                Category::Entertainment,
+                Category::Sports,
+                Category::Culture,
+                Category::Gaming,
+                Category::Business,
+            ],
+        }
+    }
+
+    /// One line telling a model what the category is for. Without this it is
+    /// choosing between bare tokens and will reach for whichever it likes.
+    pub const fn hint(&self) -> &'static str {
+        match self {
+            Self::Markets => "prices, flows, trading, ETFs, treasury holdings",
+            Self::Policy => "regulation, legislation, courts, enforcement, government",
+            Self::Tech => "protocol and infrastructure engineering",
+            Self::Defi => "lending, DEXes, stablecoins, yield, on-chain finance",
+            Self::Business => "funding, earnings, hiring, deals, corporate strategy",
+            Self::Security => "hacks, exploits, vulnerabilities, scams, incidents",
+            Self::Ai => "general AI coverage that fits no narrower section",
+            Self::Nft => "NFTs, collectibles, digital art",
+            Self::Gaming => "games and game studios specifically",
+            Self::Culture => "community, discourse, people, opinion-shaped news",
+            Self::Research => "papers, benchmarks, evaluations, published results",
+            Self::Models => "a model or system shipping: weights, APIs, capabilities",
+            Self::Compute => "chips, datacentres, energy, hardware supply",
+            Self::Safety => "alignment, evaluations, misuse, model incidents",
+            Self::World => "conflict, diplomacy, borders, international institutions",
+            Self::Politics => "elections, legislatures, campaigns, parties, government",
+            Self::Health => "medicine, disease, hospitals, drugs, biotech",
+            Self::Climate => "emissions, warming, weather, environment, decarbonisation",
+            Self::Space => "rockets, satellites, missions, astronomy, orbital industry",
+            Self::Science => "discovery outside computing: physics, biology, materials",
+            Self::Sports => "competition, leagues, athletes, fixtures, results",
+            Self::Entertainment => "film, television, music, celebrity, streaming",
+            Self::Energy => "oil, gas, the grid, nuclear, solar, wind",
+        }
+    }
+}
+
+impl Beat {
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Ai => "AI",
+            Self::Crypto => "Crypto",
+            Self::Markets => "Markets",
+            Self::Tech => "Tech",
+            Self::World => "World",
+            Self::Science => "Science",
+            Self::Culture => "Culture",
+        }
+    }
+
+    /// Where a category sits when nothing better is known.
+    ///
+    /// Only used as a fallback: the ingest-time classifier decides a story's
+    /// beat from its text, and a source can pin one. This exists so a category
+    /// that is inherently one-sided never lands on the wrong desk by default.
+    pub const fn of_category(c: Category) -> Option<Beat> {
+        match c {
+            Category::Research | Category::Models | Category::Compute | Category::Safety => {
+                Some(Beat::Ai)
+            }
+            Category::Defi | Category::Nft => Some(Beat::Crypto),
+            Category::World | Category::Politics => Some(Beat::World),
+            Category::Space | Category::Health | Category::Climate | Category::Science => {
+                Some(Beat::Science)
+            }
+            Category::Sports | Category::Entertainment => Some(Beat::Culture),
+            // Energy sits on Tech and Science and World depending on the story
+            // — a grid outage, a fusion result and an OPEC decision are three
+            // different desks — so it is routed per item rather than pinned.
+            _ => None,
+        }
+    }
+}
+
+/// An upstream publisher we poll.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Source {
+    pub id: SourceId,
+    pub slug: String,
+    pub name: String,
+    pub kind: SourceKind,
+    /// Feed / endpoint URL actually polled.
+    pub url: String,
+    pub homepage: String,
+    /// 0–100. Weights corroboration: three low-trust aggregators echoing each
+    /// other is not the same as one tier-1 outlet with a named reporter.
+    pub trust: i16,
+    /// Pins the beat of everything this source publishes. `None` for
+    /// general-interest sources, whose items are routed one at a time.
+    pub beat: Option<Beat>,
+    /// Result of the last robots.txt check. `false` means Scout skips it.
+    pub robots_ok: bool,
+    /// Whether this publisher permits its text being put into a model.
+    ///
+    /// A different question from `robots_ok`, and increasingly a different
+    /// answer: sites welcome crawlers and link traffic while blocking the AI
+    /// crawlers by name. False keeps the source — polled, ranked, linked — and
+    /// keeps its body text out of the Skein.
+    pub ai_input_ok: bool,
+    /// The `Content-Signal` line as published, for the record.
+    pub ai_signal: Option<String>,
+    pub poll_interval_s: i32,
+    /// HTTP conditional-GET state, so we re-fetch politely.
+    pub etag: Option<String>,
+    pub last_modified: Option<String>,
+    pub last_polled_at: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+/// One item as it arrived from a source, before any editorial judgement.
+///
+/// `body_raw` is a **private working copy** used only for claim extraction and
+/// verbatim-overlap checks. It is never selected into any API response or
+/// rendered page — see [`crate::policy`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawItem {
+    pub id: RawItemId,
+    pub source_id: SourceId,
+    pub external_id: Option<String>,
+    pub canonical_url: String,
+    /// SHA-256 of `canonical_url`. Unique — the dedupe key.
+    pub url_hash: String,
+    pub title: String,
+    pub dek: Option<String>,
+    pub authors: Vec<String>,
+    pub published_at: DateTime<Utc>,
+    pub fetched_at: DateTime<Utc>,
+    /// Short summary supplied by the feed itself.
+    pub summary_raw: Option<String>,
+    #[serde(skip_serializing)]
+    pub body_raw: Option<String>,
+    pub body_hash: Option<String>,
+    /// 64-bit SimHash over the normalized title+lede, for cheap near-dupe
+    /// detection without an embedding provider.
+    pub simhash: i64,
+    pub lang: String,
+    pub image_url: Option<String>,
+    /// Provider video id when this came from a video source; `None` otherwise.
+    pub video_id: Option<String>,
+    /// Desk this item was routed to at ingest.
+    pub beat: Option<Beat>,
+    pub story_id: Option<StoryId>,
+    pub triaged: bool,
+}
+
+impl RawItem {
+    /// The public projection. Enforces that `body_raw` never leaves the server.
+    pub fn public(&self) -> RawItemPublic {
+        RawItemPublic {
+            id: self.id,
+            source_id: self.source_id,
+            canonical_url: self.canonical_url.clone(),
+            title: self.title.clone(),
+            authors: self.authors.clone(),
+            published_at: self.published_at,
+            image_url: self.image_url.clone(),
+            video_id: self.video_id.clone(),
+        }
+    }
+}
+
+/// What the outside world may see of a source item: a pointer, never the text.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RawItemPublic {
+    pub id: RawItemId,
+    pub source_id: SourceId,
+    pub canonical_url: String,
+    pub title: String,
+    pub authors: Vec<String>,
+    pub published_at: DateTime<Utc>,
+    pub image_url: Option<String>,
+    pub video_id: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Stories
+// ---------------------------------------------------------------------------
+
+str_enum! {
+    /// The two products are independently commissioned and edited. This is not
+    /// a translation flag: it determines source pools, prompts and front pages.
+    pub enum EditorialLanguage {
+        Zh => "zh",
+        En => "en",
+    }
+}
+
+impl EditorialLanguage {
+    pub fn from_source_lang(lang: &str) -> Self {
+        if lang.trim().to_ascii_lowercase().starts_with("zh") {
+            Self::Zh
+        } else {
+            Self::En
+        }
+    }
+
+    pub const fn html_lang(self) -> &'static str {
+        match self {
+            Self::Zh => "zh-CN",
+            Self::En => "en",
+        }
+    }
+}
+
+str_enum! {
+    /// Which surface a story is destined for.
+    pub enum StoryKind {
+        /// The Wire: fast aggregation. Headline, short AI summary, link out.
+        Wire => "wire",
+        /// The Desk: original synthesis across multiple sources.
+        Desk => "desk",
+        /// Golden Egg: long-form research.
+        GoldenEgg => "golden_egg",
+    }
+}
+
+str_enum! {
+    pub enum StoryStatus {
+        Triage => "triage",
+        Clustering => "clustering",
+        Drafting => "drafting",
+        Review => "review",
+        Published => "published",
+        /// Real but not yet publishable — usually single-source on a big claim.
+        Held => "held",
+        Killed => "killed",
+    }
+}
+
+/// An *event*, distinct from any single report of it.
+///
+/// Five outlets covering one hack produce five `RawItem`s and exactly one
+/// `Story`. That is the whole point: it is what makes cross-source
+/// corroboration and disagreement expressible.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Story {
+    pub id: StoryId,
+    pub slug: String,
+    pub kind: StoryKind,
+    pub status: StoryStatus,
+    /// Working title until Copydesk writes the real headline.
+    pub title: String,
+    /// Two or three sentences in our own words. What the Wire renders, and the
+    /// fallback blurb anywhere a full article does not exist yet.
+    pub summary: Option<String>,
+    pub category: Category,
+    /// 0–100. Drives the Desk/Wire split and front-page ranking.
+    pub newsworthiness: i16,
+    /// Independent-source velocity: how fast corroboration is arriving.
+    /// A story picking up four outlets in ten minutes is a different animal
+    /// from one that accreted four over two days.
+    pub velocity: f32,
+    pub source_count: i32,
+    pub primary_asset: Option<String>,
+    pub assets: Vec<String>,
+    /// Which desk this belongs to.
+    pub beat: Beat,
+    /// Independent edition that commissioned and published this story.
+    pub editorial_language: EditorialLanguage,
+    pub image_url: Option<String>,
+    /// Provider video id when this story came from a video source. An id, not
+    /// a URL — the embed host is chosen at render time.
+    pub video_id: Option<String>,
+    pub first_seen_at: DateTime<Utc>,
+    pub published_at: Option<DateTime<Utc>>,
+    pub updated_at: DateTime<Utc>,
+    /// Set when Gander holds or kills, so the decision is auditable.
+    pub editor_note: Option<String>,
+}
+
+str_enum! {
+    /// How a given source item relates to the story it was attached to.
+    pub enum ItemRole {
+        /// First item that created the cluster.
+        Seed => "seed",
+        Corroborating => "corroborating",
+        /// Disagrees with the seed on a material fact. Kept deliberately —
+        /// disagreement is signal, and burying it is how aggregators mislead.
+        Contradicting => "contradicting",
+        /// Related background, not evidence.
+        Context => "context",
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Claims — the unit of truth
+// ---------------------------------------------------------------------------
+
+str_enum! {
+    pub enum ClaimKind {
+        /// A discrete assertion about the world.
+        Fact => "fact",
+        /// A quantity. Carries `numeric_value` + `unit` so it can be checked.
+        Figure => "figure",
+        /// Attributed speech.
+        Quote => "quote",
+        /// A prediction. Never verifiable at publish time; labelled as such.
+        Forecast => "forecast",
+    }
+}
+
+str_enum! {
+    /// Verification state. This is the number the reader actually cares about.
+    pub enum Verification {
+        Unverified => "unverified",
+        /// Exactly one independent source. Publishable, but flagged in the UI.
+        SingleSource => "single_source",
+        /// Two or more independent sources agree.
+        Corroborated => "corroborated",
+        /// Sources materially disagree. Shown to the reader, both sides.
+        Disputed => "disputed",
+        /// Affirmatively contradicted by a higher-trust source.
+        Refuted => "refuted",
+        /// Checked against chain data or a primary filing — the strongest tier.
+        PrimaryVerified => "primary_verified",
+    }
+}
+
+impl Verification {
+    /// Whether a claim in this state may appear in published prose.
+    pub const fn publishable(&self) -> bool {
+        !matches!(self, Self::Refuted)
+    }
+
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Unverified => "Unverified",
+            Self::SingleSource => "Single source",
+            Self::Corroborated => "Corroborated",
+            Self::Disputed => "Disputed",
+            Self::Refuted => "Refuted",
+            Self::PrimaryVerified => "Primary-verified",
+        }
+    }
+}
+
+str_enum! {
+    pub enum Stance {
+        Supports => "supports",
+        Contradicts => "contradicts",
+        Mentions => "mentions",
+    }
+}
+
+/// A single checkable assertion, with everything needed to defend it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Claim {
+    pub id: ClaimId,
+    pub story_id: StoryId,
+    /// One sentence, self-contained, no pronouns pointing outside itself.
+    pub text: String,
+    pub kind: ClaimKind,
+    /// 0.0–1.0, assigned by Sentinel after cross-source checking.
+    pub confidence: f32,
+    pub verification: Verification,
+    pub numeric_value: Option<Decimal>,
+    pub unit: Option<String>,
+    /// The moment the claim is true *as of* — figures go stale fast in crypto.
+    pub as_of: Option<DateTime<Utc>>,
+    pub created_by_run: Option<RunId>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Links a claim to a source item, with the exact excerpt that backs it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimSource {
+    pub claim_id: ClaimId,
+    pub raw_item_id: RawItemId,
+    pub stance: Stance,
+    /// Hard-capped at [`crate::policy::MAX_QUOTE_WORDS`] words, both in the
+    /// policy engine and by a database CHECK constraint.
+    pub excerpt: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Articles — a rendering of a claim set
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Article {
+    pub id: ArticleId,
+    pub story_id: StoryId,
+    /// Monotonic. Corrections create a new version; old ones stay readable.
+    pub version: i32,
+    pub headline: String,
+    pub dek: String,
+    pub slug: String,
+    /// Markdown. Citation markers are `[^c1]`-style and resolve through
+    /// [`ArticleCitation`] to claims.
+    pub body_md: String,
+    pub seo_title: String,
+    pub seo_desc: String,
+    pub reading_time_s: i32,
+    pub status: StoryStatus,
+    pub published_at: Option<DateTime<Utc>>,
+    /// SHA-256 of the rendered body. Makes any post-hoc edit detectable.
+    pub content_hash: String,
+    pub editor_run_id: Option<RunId>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArticleCitation {
+    pub article_id: ArticleId,
+    /// The marker as it appears in `body_md`, e.g. `c1`.
+    pub marker: String,
+    pub claim_id: ClaimId,
+}
+
+/// Append-only. We never silently edit a published page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Correction {
+    pub id: CorrectionId,
+    pub article_id: ArticleId,
+    pub from_version: i32,
+    pub to_version: i32,
+    pub reason: String,
+    pub diff_md: String,
+    pub issued_at: DateTime<Utc>,
+    pub agent_id: Option<AgentId>,
+}
+
+// ---------------------------------------------------------------------------
+// Analysis — inference, kept structurally separate from reporting
+// ---------------------------------------------------------------------------
+
+/// The Skein's read on a story: what it means, and where it is going.
+///
+/// This is the one place on the site where VictoriaPark asserts something no source
+/// said. That is the point — it is the analysis a reader comes for — but it is
+/// why the type is distinct from [`Article`] rather than another body field:
+/// every surface that renders an `Analysis` must opt in, and can therefore be
+/// made to label it. Nothing here is a claim, nothing here enters the claim
+/// ledger, and nothing here is ever presented as corroborated.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Analysis {
+    pub id: AnalysisId,
+    pub story_id: StoryId,
+    /// What the event means, argued from the sources.
+    pub significance: String,
+    /// Where it leads. A forecast, and rendered as one.
+    pub direction: String,
+    /// The period `direction` is claimed over. An unbounded prediction cannot
+    /// be wrong, which makes it worthless to print.
+    pub horizon: String,
+    /// 0-100, the model's confidence in `direction`. Shown, not hidden.
+    pub confidence: i16,
+    /// Concrete signals that would confirm or refute the direction — the part
+    /// that makes the forecast checkable instead of decorative.
+    pub watch: Vec<String>,
+    pub model: Option<String>,
+    pub run_id: Option<RunId>,
+    /// Characters of real source text the inference was drawn from.
+    pub grounded_chars: i32,
+    pub created_at: DateTime<Utc>,
+}
+
+impl Analysis {
+    /// How firmly the direction is stated. Drives both the wording the reader
+    /// sees and the badge next to it, so the two can never disagree.
+    pub const fn stance(&self) -> &'static str {
+        match self.confidence {
+            80..=100 => "Likely",
+            60..=79 => "Leaning",
+            40..=59 => "Uncertain",
+            _ => "Speculative",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Entities
+// ---------------------------------------------------------------------------
+
+str_enum! {
+    pub enum EntityKind {
+        Person => "person",
+        Company => "company",
+        Protocol => "protocol",
+        Token => "token",
+        Chain => "chain",
+        Regulator => "regulator",
+        Fund => "fund",
+        Exchange => "exchange",
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Entity {
+    pub id: EntityId,
+    pub kind: EntityKind,
+    pub name: String,
+    pub slug: String,
+    pub ticker: Option<String>,
+    pub aliases: Vec<String>,
+    pub summary: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+// ---------------------------------------------------------------------------
+// The Flock
+// ---------------------------------------------------------------------------
+
+str_enum! {
+    /// The ten operational roles. Every one is an AI agent; there are no humans
+    /// in the publishing path.
+    pub enum AgentRole {
+        /// Polls sources, normalizes, dedupes. Deterministic — no LLM.
+        Scout => "scout",
+        /// Triage: is this news at all? Category, assets, spam filter.
+        Gosling => "gosling",
+        /// Clusters items into events, scores newsworthiness.
+        Curator => "curator",
+        /// Extracts claims and drafts the story.
+        Scribe => "scribe",
+        /// Cross-source verification. Assigns confidence, flags disputes.
+        Sentinel => "sentinel",
+        /// Attaches market and on-chain context to figures.
+        Quant => "quant",
+        /// Headline, dek, SEO, house style.
+        Copydesk => "copydesk",
+        /// Editor-in-chief. Publish / hold / kill, and front-page ranking.
+        Gander => "gander",
+        /// Distribution: Wire, newsletter, feeds, push.
+        Herald => "herald",
+        /// Post-publish monitoring; issues corrections.
+        Ombuds => "ombuds",
+        /// Reads the flight path: what the story means and where it is going.
+        Skein => "skein",
+    }
+}
+
+impl AgentRole {
+    pub const fn display_name(&self) -> &'static str {
+        match self {
+            Self::Scout => "地平线 · Horizon",
+            Self::Gosling => "快讯编辑 · Intake",
+            Self::Curator => "聚类编辑 · Curator",
+            Self::Scribe => "主笔 · Scribe",
+            Self::Sentinel => "求证 · Verifier",
+            Self::Quant => "数据背景 · Context",
+            Self::Copydesk => "标题台 · Copy Desk",
+            Self::Gander => "总编 · Editor-in-Chief",
+            Self::Herald => "分发台 · Publisher",
+            Self::Ombuds => "监察 · Ombuds",
+            Self::Skein => "纵深 · Analysis",
+        }
+    }
+
+    /// One-line job description, shown on `/flock`.
+    pub const fn beat(&self) -> &'static str {
+        match self {
+            Self::Scout => "全天监看中文与英文来源，识别世界头条",
+            Self::Gosling => "判断新闻性、栏目与公共重要度",
+            Self::Curator => "将多家报道聚成同一可核查事件",
+            Self::Scribe => "提取事实主张并跨来源原创综合",
+            Self::Sentinel => "核验每项主张、反证与来源独立性",
+            Self::Quant => "补充数据、法律、制度与时间背景",
+            Self::Copydesk => "标题、导语、SEO 与双语编辑规范",
+            Self::Gander => "最终发布、留稿或撤稿的编辑决定",
+            Self::Herald => "快讯、RSS、微信与社交分发",
+            Self::Ombuds => "持续复核已发布内容并追加更正",
+            Self::Skein => "分离报道、传统价值观点与可证伪预测",
+        }
+    }
+
+    pub const fn tier(&self) -> ModelTier {
+        match self {
+            Self::Scout => ModelTier::None,
+            Self::Gosling | Self::Curator | Self::Copydesk | Self::Herald => ModelTier::Fast,
+            Self::Scribe | Self::Quant | Self::Ombuds => ModelTier::Mid,
+            Self::Sentinel | Self::Gander | Self::Skein => ModelTier::Top,
+        }
+    }
+}
+
+str_enum! {
+    /// Capability tier a role needs. Concrete model IDs are resolved per
+    /// provider in `bg-llm`, so swapping providers never touches agent code.
+    pub enum ModelTier {
+        /// Deterministic, no model call.
+        None => "none",
+        Fast => "fast",
+        Mid => "mid",
+        Top => "top",
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agent {
+    pub id: AgentId,
+    pub slug: String,
+    pub name: String,
+    pub role: AgentRole,
+    pub tier: ModelTier,
+    pub system_prompt: String,
+    pub temperature: f32,
+    pub enabled: bool,
+}
+
+str_enum! {
+    pub enum RunStatus {
+        Running => "running",
+        Ok => "ok",
+        Failed => "failed",
+        /// Nothing to do — not a failure.
+        Skipped => "skipped",
+        /// Refused by the run budget.
+        Budgeted => "budgeted",
+    }
+}
+
+/// One agent invocation. Written for *every* stage, LLM-backed or not.
+///
+/// This table is the substrate for `/flock`: VictoriaPark publishes its own
+/// operating costs and error rate. If we are going to claim an AI newsroom is
+/// trustworthy, the ledger has to be public.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRun {
+    pub id: RunId,
+    pub agent_id: AgentId,
+    pub role: AgentRole,
+    pub story_id: Option<StoryId>,
+    pub stage: String,
+    pub status: RunStatus,
+    pub provider: String,
+    pub model: String,
+    pub prompt_tokens: i32,
+    pub completion_tokens: i32,
+    pub cost_usd: Decimal,
+    pub latency_ms: i32,
+    pub input_hash: Option<String>,
+    pub output_hash: Option<String>,
+    pub note: Option<String>,
+    pub error: Option<String>,
+    pub started_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,
+}
+
+// ---------------------------------------------------------------------------
+// Market data
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Asset {
+    pub id: AssetId,
+    pub symbol: String,
+    pub name: String,
+    pub coingecko_id: Option<String>,
+    pub rank: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PriceTick {
+    pub symbol: String,
+    pub ts: DateTime<Utc>,
+    pub price_usd: Decimal,
+    pub change_24h_pct: Option<f64>,
+    pub volume_24h: Option<Decimal>,
+    pub market_cap: Option<Decimal>,
+}
+
+// ---------------------------------------------------------------------------
+// Composite read models
+// ---------------------------------------------------------------------------
+
+/// A claim together with everything backing it — what the ledger sidebar renders.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimWithSources {
+    #[serde(flatten)]
+    pub claim: Claim,
+    pub sources: Vec<ClaimSourceRef>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimSourceRef {
+    pub raw_item_id: RawItemId,
+    pub stance: Stance,
+    pub excerpt: Option<String>,
+    pub source_name: String,
+    pub source_slug: String,
+    pub source_trust: i16,
+    pub url: String,
+    pub title: String,
+    pub published_at: DateTime<Utc>,
+}
+
+/// Everything needed to render `/story/:slug` in one payload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoryFull {
+    pub story: Story,
+    pub article: Option<Article>,
+    pub claims: Vec<ClaimWithSources>,
+    pub sources: Vec<SourceRef>,
+    pub corrections: Vec<Correction>,
+    pub runs: Vec<AgentRunSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceRef {
+    pub name: String,
+    pub slug: String,
+    pub url: String,
+    pub title: String,
+    pub trust: i16,
+    pub role: ItemRole,
+    pub published_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRunSummary {
+    pub role: AgentRole,
+    pub status: RunStatus,
+    pub model: String,
+    pub cost_usd: Decimal,
+    pub latency_ms: i32,
+    pub started_at: DateTime<Utc>,
+    pub note: Option<String>,
+}
+
+/// A Wire entry: pointer plus our own short summary. Never the source's text.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WireEntry {
+    pub story_id: StoryId,
+    pub slug: String,
+    pub title: String,
+    /// 2–3 sentences, written by us.
+    pub summary: String,
+    pub category: Category,
+    pub source_name: String,
+    pub source_slug: String,
+    pub source_url: String,
+    /// What kind of thing the lead source is. A preprint and a Reddit thread
+    /// are not articles and should not be rendered as if they were.
+    pub source_kind: SourceKind,
+    pub beat: Beat,
+    pub source_count: i32,
+    pub published_at: DateTime<Utc>,
+    pub newsworthiness: i16,
+    pub image_url: Option<String>,
+    pub assets: Vec<String>,
+}
+
+/// Live newsroom stats for `/flock`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlockStats {
+    pub role: AgentRole,
+    pub name: String,
+    pub runs_24h: i64,
+    pub ok_24h: i64,
+    pub failed_24h: i64,
+    pub cost_24h_usd: Decimal,
+    pub avg_latency_ms: i64,
+    pub tokens_24h: i64,
+    pub last_run_at: Option<DateTime<Utc>>,
+    pub last_note: Option<String>,
+    /// The most recent error from a *failed* run, unabridged.
+    ///
+    /// Separate from `last_note`, which comes from whichever run finished last
+    /// and is cheerful even while most of them are being refused.
+    pub last_error: Option<String>,
+    pub enabled: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn enum_roundtrips_through_its_wire_string() {
+        for v in Verification::ALL {
+            assert_eq!(Verification::from_str(v.as_str()).unwrap(), *v);
+        }
+        for c in Category::ALL {
+            assert_eq!(Category::from_str(c.as_str()).unwrap(), *c);
+        }
+        for r in AgentRole::ALL {
+            assert_eq!(AgentRole::from_str(r.as_str()).unwrap(), *r);
+        }
+    }
+
+    #[test]
+    fn unknown_enum_token_is_an_error_not_a_default() {
+        assert!(Verification::from_str("probably_true").is_err());
+    }
+
+    #[test]
+    fn refuted_claims_are_not_publishable() {
+        assert!(!Verification::Refuted.publishable());
+        assert!(Verification::Disputed.publishable());
+    }
+
+    /// Every AI story came back tagged "Gaming" when triage was offered all
+    /// fourteen categories as bare tokens. Restricting the choice per desk is
+    /// what fixed it, so these are the properties that must hold.
+    #[test]
+    fn each_desk_offers_only_categories_that_belong_to_it() {
+        let ai = Category::for_beat(Beat::Ai);
+        let crypto = Category::for_beat(Beat::Crypto);
+
+        // The error that actually happened, and its mirror.
+        assert!(
+            !ai.contains(&Category::Gaming),
+            "gaming is not an AI section"
+        );
+        assert!(!ai.contains(&Category::Defi));
+        assert!(!ai.contains(&Category::Nft));
+        assert!(!crypto.contains(&Category::Compute));
+        assert!(!crypto.contains(&Category::Models));
+        assert!(!crypto.contains(&Category::Research));
+        assert!(!crypto.contains(&Category::Safety));
+
+        // Each desk needs somewhere for its defining stories to go.
+        for c in [
+            Category::Models,
+            Category::Research,
+            Category::Compute,
+            Category::Safety,
+        ] {
+            assert!(ai.contains(&c), "AI desk needs {c}");
+        }
+        for c in [Category::Markets, Category::Defi] {
+            assert!(crypto.contains(&c), "crypto desk needs {c}");
+        }
+
+        // Neither list may be empty or contain duplicates — a duplicate would
+        // reach the model as a repeated enum variant.
+        for (name, list) in [("ai", ai), ("crypto", crypto)] {
+            assert!(!list.is_empty(), "{name} has no categories");
+            let mut seen = std::collections::HashSet::new();
+            for c in list {
+                assert!(seen.insert(c), "{name} lists {c} twice");
+            }
+        }
+    }
+
+    /// A bare enum told the model nothing about what a category meant. Every
+    /// one must carry a hint, or triage is guessing again.
+    #[test]
+    fn every_category_explains_itself() {
+        for c in Category::ALL {
+            let h = c.hint();
+            assert!(h.len() > 12, "{c} has no usable hint: {h:?}");
+            assert!(
+                !h.contains(c.as_str()),
+                "{c}'s hint just restates its name: {h:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_flock_has_eleven_roles_and_scout_needs_no_model() {
+        assert_eq!(AgentRole::ALL.len(), 11);
+        assert_eq!(AgentRole::Scout.tier(), ModelTier::None);
+        assert_eq!(AgentRole::Gander.tier(), ModelTier::Top);
+    }
+
+    #[test]
+    fn raw_item_public_projection_drops_the_body() {
+        let json = serde_json::to_string(&RawItem {
+            id: RawItemId::new(),
+            source_id: SourceId::new(),
+            external_id: None,
+            canonical_url: "https://example.com/a".into(),
+            url_hash: "deadbeef".into(),
+            title: "T".into(),
+            dek: None,
+            authors: vec![],
+            published_at: Utc::now(),
+            fetched_at: Utc::now(),
+            summary_raw: None,
+            body_raw: Some("SECRET SOURCE TEXT".into()),
+            body_hash: None,
+            simhash: 0,
+            lang: "en".into(),
+            image_url: None,
+            video_id: None,
+            beat: None,
+            story_id: None,
+            triaged: false,
+        })
+        .unwrap();
+        assert!(!json.contains("SECRET SOURCE TEXT"));
+    }
+}

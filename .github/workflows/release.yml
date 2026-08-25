@@ -1,0 +1,167 @@
+name: Build release bundle
+
+# Builds the deployable bundle on GitHub's runners and publishes it as a
+# release asset.
+#
+# Why: the production host is behind a slow consumer uplink (~12 KB/s measured).
+# Building there means pulling ~400 MB of crates, which is most of a day. One
+# ~40 MB self-contained tarball is a few minutes instead, and it makes every
+# deploy a download-and-symlink rather than a compile — so a rollback costs
+# nothing and the host needs no Rust toolchain at all.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish the bundle under"
+        required: false
+        default: "nightly"
+
+permissions:
+  contents: write
+
+jobs:
+  bundle:
+    name: Build bundle (x86_64-linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-leptos
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-leptos@0.3.7
+
+      # cargo-leptos fetches dart-sass-<ver>-linux-x64-MUSL for any x86_64
+      # Linux, and the `sass` wrapper it ships execs a musl-linked `src/dart`.
+      # On a glibc runner that fails as
+      #     exec: .../dart-sass/src/dart: not found
+      # which reads like a missing file but is the kernel reporting a missing
+      # ELF interpreter. Installing the musl loader makes the binary runnable.
+      # This is the whole reason the release bundle would not build while every
+      # cargo build in it succeeded.
+      - name: Install musl loader for cargo-leptos' dart-sass
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq musl
+
+      # Builds the server binary and the WASM/CSS bundle in one pass. Building
+      # them separately risks a skew between the hydration bundle and the
+      # server that renders the markup it hydrates.
+      - name: Build site
+        shell: bash
+        env:
+          RUST_BACKTRACE: "1"
+        run: |
+          set -o pipefail   # not on by default in Actions' bash; `tee` would eat the failure
+          cargo leptos build --release -v 2>&1 | tee /tmp/build-site.log
+
+      # Reading this repo's Actions logs requires a signed-in session, which
+      # rules out fetching them from a script. Check-run annotations, by
+      # contrast, are served by the public API — so on failure the tail of the
+      # build output is re-emitted as a workflow error and becomes readable
+      # without credentials.
+      - name: Surface the failure in annotations
+        if: failure()
+        shell: bash
+        run: |
+          # A plain tail is not enough here: cargo-leptos runs the front, server
+          # and style steps concurrently and only reports "Failed to build" at
+          # the end, so whichever one actually failed has long scrolled past.
+          # Grep the whole log for the lines that name a cause, then append the
+          # tail for context. Disk is included because exhausting it during a
+          # release link surfaces as an unrelated-looking linker error.
+          {
+            df -h /
+            echo
+            echo "--- lines naming a cause ---"
+            grep -aiE 'error|failed|cannot|not found|no such|denied|sass|style|assets' \
+              /tmp/build-site.log | grep -avE '^\s*(Compiling|Downloaded)' | tail -40
+            echo
+            echo "--- tail ---"
+            tail -c 1200 /tmp/build-site.log
+          } 2>/dev/null \
+            | python3 -c 'import sys; print("::error title=cargo leptos build --release::" + sys.stdin.read().replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+
+      - name: Build CLI
+        run: cargo build --release -p bg-cli
+
+      - name: Assemble bundle
+        run: |
+          set -euo pipefail
+          mkdir -p bundle/bin
+          cp target/release/bg-web bundle/bin/
+          cp target/release/bg     bundle/bin/
+          # Leptos resolves hashed asset names from hash.txt in the *binary's*
+          # directory, so this must sit beside bg-web rather than in site/.
+          cp target/release/hash.txt bundle/bin/
+          cp -r target/site        bundle/site
+          cp -r migrations         bundle/migrations
+          # Unit files ship with the build so the installer can keep the
+          # running units in step with the repo. Without this a systemd change
+          # is committed, deployed, and quietly has no effect.
+          mkdir -p bundle/deploy
+          cp deploy/*.service       bundle/deploy/
+          git rev-parse HEAD > bundle/REVISION
+          date -u +%Y-%m-%dT%H:%M:%SZ > bundle/BUILT_AT
+          strip bundle/bin/bg-web bundle/bin/bg || true
+          tar czf victoriapark-x86_64-linux.tar.gz -C bundle .
+          sha256sum victoriapark-x86_64-linux.tar.gz > victoriapark-x86_64-linux.tar.gz.sha256
+          ls -lh victoriapark-x86_64-linux.tar.gz
+          cat victoriapark-x86_64-linux.tar.gz.sha256
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: victoriapark-x86_64-linux
+          path: |
+            victoriapark-x86_64-linux.tar.gz
+            victoriapark-x86_64-linux.tar.gz.sha256
+          retention-days: 30
+
+      # A release asset gives the host a stable URL it can curl directly,
+      # which a workflow artifact does not (those need an authenticated API
+      # call to fetch).
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: VictoriaPark ${{ github.event.inputs.tag || github.ref_name }}
+          files: |
+            victoriapark-x86_64-linux.tar.gz
+            victoriapark-x86_64-linux.tar.gz.sha256
+          generate_release_notes: true
+          prerelease: ${{ github.event.inputs.tag == 'nightly' }}
+
+  # A release that fails to build is more urgent than a lint error: the tag
+  # exists, the deploy step is waiting for an asset, and nothing says so. Same
+  # mechanism as CI — an issue, mailed to watchers, no external secret.
+  notify:
+    name: Report failure
+    runs-on: ubuntu-latest
+    needs: [bundle]
+    if: failure()
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the release failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          body=$(printf 'The release bundle for `%s` failed to build, so no asset was published and any deploy of this tag will not find one.\n\n%s\n' "$TAG" "$RUN_URL")
+          existing=$(gh issue list --label release-failure --state open --limit 1 --json number -q '.[0].number' || true)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh label create release-failure --color b60205 --description "Release bundle failed to build" 2>/dev/null || true
+            gh issue create --title "Release bundle is failing" --label release-failure --body "$body"
+          fi

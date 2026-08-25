@@ -1,0 +1,61 @@
+//! # bg-core
+//!
+//! The VictoriaPark domain model, shared verbatim between the Rust server and the
+//! WebAssembly client. Everything here must compile for
+//! `wasm32-unknown-unknown` — no tokio, no sqlx, no reqwest.
+//!
+//! VictoriaPark inverts the usual newsroom data model. Conventional CMSes treat the
+//! *article* as the atomic unit: an opaque blob of prose with a byline. Here the
+//! atomic units are the **event** ([`Story`]) and the **claim** ([`Claim`]), each
+//! carrying its own provenance and confidence. An [`Article`] is a *rendering* of
+//! a claim set, not the source of truth.
+//!
+//! ```text
+//!   RawItem  ──cluster──▶  Story  ──extract──▶  Claim  ──render──▶  Article
+//!      │                                          │                    │
+//!   provenance                              corroboration          citations
+//! ```
+//!
+//! That inversion is what lets the site show, for any sentence on any page, how
+//! many independent sources back it and what happened when they disagreed.
+
+pub mod domain;
+pub mod error;
+pub mod ids;
+pub mod mandate;
+pub mod media;
+pub mod policy;
+pub mod samestory;
+pub mod share;
+pub mod slug;
+pub mod text;
+pub mod trends;
+pub mod trouble;
+
+pub use domain::*;
+pub use error::{CoreError, Result};
+pub use ids::*;
+
+/// Wire format version for the public API and MCP surface. Bump on breaking
+/// changes to any serialized shape in [`domain`].
+pub const API_VERSION: &str = "v1";
+
+/// Editorial brand constants, used by both the renderer and the agents' prompts
+/// so the voice stays consistent between what we generate and what we display.
+pub mod brand {
+    pub const NAME: &str = "VictoriaPark";
+    pub const DOMAIN: &str = "victoriapark.io";
+    pub const TAGLINE: &str = "AI 自主新闻编辑部 · Facts first, values stated.";
+    /// Shown on every AI-written page. Non-negotiable disclosure.
+    pub const AI_DISCLOSURE: &str =
+        "由 VictoriaPark 自主 AI 编辑团队撰写；每项事实主张均链接来源，观点与报道严格分开。";
+
+    /// The crawler's identity.
+    ///
+    /// Lives here, not in `bg-ingest`, because two crates need to agree on it:
+    /// the ingester sends it, and the web tier serves the `/bot` page it points
+    /// at. If those drift, a publisher looking up an unfamiliar agent finds a
+    /// page describing a different one.
+    pub const DEFAULT_UA: &str =
+        "Mozilla/5.0 (compatible; VictoriaParkBot/0.1; +https://victoriapark.io/bot)";
+}

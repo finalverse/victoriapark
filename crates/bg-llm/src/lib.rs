@@ -1,0 +1,787 @@
+//! # bg-llm
+//!
+//! One trait, three providers, and a cost ledger.
+//!
+//! Agents never name a model. They ask for a [`ModelTier`] and this crate
+//! resolves it per provider, so switching the whole newsroom from Anthropic to
+//! a local Ollama is an environment variable rather than a code change.
+//!
+//! ## The stub provider is not a mock
+//!
+//! [`stub::StubProvider`] generates deterministic output from the caller's JSON
+//! schema. That makes the entire pipeline runnable with no API key and no cost
+//! — which is what lets the policy engine, the clustering, the database writes
+//! and the rendering all be tested end to end without spending anything or
+//! depending on the network.
+
+pub mod anthropic;
+pub mod openai;
+pub mod pacer;
+pub mod pricing;
+pub mod schema;
+pub mod stub;
+
+use async_trait::async_trait;
+use bg_core::domain::ModelTier;
+use pricing::ModelSpec;
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use thiserror::Error;
+use tracing::{debug, info, warn};
+
+pub type Result<T, E = LlmError> = std::result::Result<T, E>;
+
+#[derive(Debug, Error)]
+pub enum LlmError {
+    #[error("{provider} returned HTTP {status}: {body}")]
+    Api {
+        provider: &'static str,
+        status: u16,
+        body: String,
+    },
+
+    /// Rate limited, with the wait the provider asked for.
+    ///
+    /// Distinct from a generic 429 because the response tells us *how long* to
+    /// wait, and honouring that is the difference between riding out a free
+    /// tier's per-minute budget and failing the whole run. Falling through to
+    /// another provider does not help when there is only one.
+    #[error("{provider} rate limited; retry in {}s", retry_after.as_secs())]
+    RateLimited {
+        provider: &'static str,
+        retry_after: std::time::Duration,
+    },
+
+    #[error("{provider} is not configured: {reason}")]
+    NotConfigured {
+        provider: &'static str,
+        reason: String,
+    },
+
+    /// The model declined on safety grounds. A normal HTTP 200 — not a
+    /// transport failure — so it is modelled as its own variant rather than
+    /// being lumped in with API errors, and it is never retried.
+    #[error("model refused the request ({category})")]
+    Refused { category: String },
+
+    #[error("could not parse model output as JSON: {detail}")]
+    BadJson { detail: String, raw: String },
+
+    #[error("model output did not satisfy the schema: {0}")]
+    SchemaViolation(String),
+
+    #[error("every provider in the failover chain failed; last error: {0}")]
+    AllProvidersFailed(String),
+
+    #[error(transparent)]
+    Transport(#[from] reqwest::Error),
+}
+
+impl LlmError {
+    /// Whether retrying, or falling through to the next provider, could help.
+    ///
+    /// A refusal and a schema violation are *decisions*, not outages — retrying
+    /// them burns money to get the same answer.
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            Self::Api { status, .. } => *status == 429 || *status >= 500,
+            Self::RateLimited { .. } => true,
+            Self::Transport(_) => true,
+            Self::Refused { .. }
+            | Self::SchemaViolation(_)
+            | Self::BadJson { .. }
+            | Self::NotConfigured { .. }
+            | Self::AllProvidersFailed(_) => false,
+        }
+    }
+}
+
+/// A completion request. Provider-agnostic.
+#[derive(Debug, Clone)]
+pub struct Request {
+    pub system: String,
+    pub user: String,
+    pub tier: ModelTier,
+    pub max_tokens: u32,
+    pub temperature: f32,
+    /// When set, the provider constrains output to this JSON Schema and the
+    /// response is validated against it before returning.
+    pub json_schema: Option<serde_json::Value>,
+    /// Short label for logs and the run ledger, e.g. `"scribe.draft"`.
+    pub task: String,
+}
+
+impl Request {
+    pub fn new(
+        task: impl Into<String>,
+        tier: ModelTier,
+        system: impl Into<String>,
+        user: impl Into<String>,
+    ) -> Self {
+        Self {
+            system: system.into(),
+            user: user.into(),
+            tier,
+            // 16k is the SDK-safe ceiling for a non-streaming request; beyond
+            // that the connection can time out before the model finishes.
+            max_tokens: 16_000,
+            temperature: 0.2,
+            json_schema: None,
+            task: task.into(),
+        }
+    }
+
+    pub fn with_schema(mut self, schema: serde_json::Value) -> Self {
+        self.json_schema = Some(schema);
+        self
+    }
+
+    pub fn with_max_tokens(mut self, n: u32) -> Self {
+        self.max_tokens = n;
+        self
+    }
+
+    pub fn with_temperature(mut self, t: f32) -> Self {
+        self.temperature = t;
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Completion {
+    pub text: String,
+    pub provider: String,
+    pub model: String,
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub cost_usd: Decimal,
+    pub latency_ms: u32,
+    /// What the provider says is left of our per-minute token allowance, and
+    /// when it refills. Groq returns both on every response, which is strictly
+    /// better than our own estimate: it is their accounting, it covers anything
+    /// else using the same key, and it needs no guessing about tokenisation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_remaining_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_reset: Option<std::time::Duration>,
+    /// Requests left, and the refill interval for one of them.
+    ///
+    /// On Groq's free tier this is the binding limit, not tokens: 1,000 a day,
+    /// refilling one every 86.4 seconds. A pipeline pass can easily want eighty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_remaining_requests: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_reset_requests: Option<std::time::Duration>,
+}
+
+impl Completion {
+    /// Parse the response as JSON. Only meaningful when the request carried a
+    /// schema.
+    pub fn json(&self) -> Result<serde_json::Value> {
+        serde_json::from_str(&self.text).map_err(|e| LlmError::BadJson {
+            detail: e.to_string(),
+            raw: self.text.chars().take(400).collect(),
+        })
+    }
+
+    pub fn parse_into<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        serde_json::from_str(&self.text).map_err(|e| LlmError::BadJson {
+            detail: e.to_string(),
+            raw: self.text.chars().take(400).collect(),
+        })
+    }
+}
+
+#[async_trait]
+pub trait LlmProvider: Send + Sync {
+    fn name(&self) -> &'static str;
+
+    /// Concrete model for a tier, plus its pricing and capabilities.
+    fn spec(&self, tier: ModelTier) -> ModelSpec;
+
+    async fn complete(&self, req: &Request) -> Result<Completion>;
+
+    /// Cheap reachability check for `bg doctor`.
+    async fn health(&self) -> Result<()>;
+
+    /// Whether this provider runs on our own hardware.
+    ///
+    /// A local model has no allowance to protect, so pacing it is pure loss:
+    /// with `BG_LLM_TOKENS_PER_MIN=8000` and a triage batch estimated at 5,000
+    /// tokens, a GPU measured at 270 headlines a minute would have been held to
+    /// about 28 — a tenfold throttle enforced on behalf of a provider that was
+    /// not being called.
+    fn is_local(&self) -> bool {
+        false
+    }
+}
+
+/// A provider chain with failover.
+///
+/// How many times to wait out a rate limit on one provider before giving up.
+///
+/// Three is enough to ride out a per-minute budget without letting a wedged
+/// provider stall a pipeline pass indefinitely.
+const MAX_RATE_LIMIT_RETRIES: u32 = 3;
+
+/// Longest wait we are willing to sit through. A quota that resets in an hour
+/// is an outage to be reported, not slept through.
+///
+/// Raised from 75s after watching it fail on production. Groq was asking for
+/// 91 seconds; we slept 75, retried, were refused again, and did that three
+/// times — 225 seconds of waiting that could not have worked, because sleeping
+/// *less* than the provider asked for guarantees the next call is refused too.
+const MAX_RATE_LIMIT_WAIT: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// Ordered, tried left to right, skipping errors that retrying cannot fix. In
+/// practice the chain ends in the stub, so the pipeline degrades to free,
+/// offline operation instead of stopping when an upstream is down.
+#[derive(Clone)]
+pub struct Llm {
+    chain: Vec<Arc<dyn LlmProvider>>,
+    /// A chain that overrides [`Self::chain`] for one tier, in `slot` order:
+    /// Fast, Mid, Top.
+    ///
+    /// The tiers do not want the same thing. Triage, distribution copy and
+    /// clustering are high-volume classification where a 7B model on the box
+    /// is not merely adequate but *better positioned*: measured on this host,
+    /// 80 tokens a second, 40 headlines classified in 8.9 seconds, valid JSON
+    /// every time, and — the part that matters — no daily allowance to run out
+    /// of. Analysis and editorial judgement still want the best model
+    /// available, and there are few enough of those calls to afford it.
+    ///
+    /// Without this the choice was all-or-nothing: keep the good model and let
+    /// triage starve behind a 200,000-token ceiling, or move everything local
+    /// and make the Skein — the one thing on the site worth reading — worse.
+    per_tier: [Option<Vec<Arc<dyn LlmProvider>>>; 3],
+    /// Keeps us inside a per-minute token allowance by waiting *before* a call
+    /// rather than absorbing the rejection after it. See [`pacer`].
+    pacer: Arc<pacer::Pacer>,
+}
+
+/// Turn provider names into a chain, skipping any that cannot be configured.
+///
+/// A missing key drops that provider with a warning rather than failing
+/// startup: a deployment running on one provider should not die because a
+/// second one is half-configured.
+fn build_chain(names: &[String]) -> Vec<Arc<dyn LlmProvider>> {
+    let mut chain: Vec<Arc<dyn LlmProvider>> = Vec::new();
+    for n in names {
+        match n.as_str() {
+            "anthropic" => match anthropic::AnthropicProvider::from_env() {
+                Ok(p) => chain.push(Arc::new(p)),
+                Err(e) => warn!(provider = "anthropic", error = %e, "skipping provider"),
+            },
+            "openai" | "openai_compat" => match openai::OpenAiProvider::from_env() {
+                Ok(p) => chain.push(Arc::new(p)),
+                Err(e) => warn!(provider = "openai", error = %e, "skipping provider"),
+            },
+            // Addressed by BG_OLLAMA_URL, not OPENAI_BASE_URL — the point is to
+            // run beside the hosted provider, not in place of it.
+            "ollama" | "local" => match openai::OpenAiProvider::ollama_from_env() {
+                Ok(p) => chain.push(Arc::new(p)),
+                Err(e) => warn!(provider = "ollama", error = %e, "skipping provider"),
+            },
+            // Same wire format, different endpoint and key name.
+            "xai" | "grok" => match openai::OpenAiProvider::from_env_named(true) {
+                Ok(p) => chain.push(Arc::new(p)),
+                Err(e) => warn!(provider = "xai", error = %e, "skipping provider"),
+            },
+            "stub" => chain.push(Arc::new(stub::StubProvider)),
+            other => warn!(provider = %other, "unknown provider, ignoring"),
+        }
+    }
+    chain
+}
+
+impl Llm {
+    pub fn new(chain: Vec<Arc<dyn LlmProvider>>) -> Self {
+        Self::with_pace(chain, pacer::limit_from_env())
+    }
+
+    /// Route one tier to its own chain. Empty leaves the tier on the default.
+    pub fn with_tier_chain(mut self, tier: ModelTier, chain: Vec<Arc<dyn LlmProvider>>) -> Self {
+        if !chain.is_empty() {
+            if let Some(s) = self.per_tier.get_mut(pacer::slot(tier)) {
+                *s = Some(chain);
+            }
+        }
+        self
+    }
+
+    /// Whether every provider this tier would use runs on our own hardware.
+    ///
+    /// All of them, not the first: a tier that falls back to a hosted provider
+    /// still needs the budget respected when it gets there.
+    pub fn tier_is_local(&self, tier: ModelTier) -> bool {
+        let c = self.chain_for(tier);
+        !c.is_empty() && c.iter().all(|p| p.is_local())
+    }
+
+    /// The providers to try for this tier, longest-standing first.
+    fn chain_for(&self, tier: ModelTier) -> &[Arc<dyn LlmProvider>] {
+        self.per_tier[pacer::slot(tier)]
+            .as_deref()
+            .unwrap_or(&self.chain)
+    }
+
+    /// `tokens_per_min` of 0 disables pacing — the right setting for a paid
+    /// tier or a local model, where the only limit is the hardware.
+    pub fn with_pace(chain: Vec<Arc<dyn LlmProvider>>, tokens_per_min: u32) -> Self {
+        assert!(
+            !chain.is_empty(),
+            "LLM chain must have at least one provider"
+        );
+        if tokens_per_min > 0 {
+            info!(tokens_per_min, "pacing LLM calls to a per-minute budget");
+        }
+        Self {
+            chain,
+            per_tier: [None, None, None],
+            pacer: Arc::new(pacer::Pacer::new(tokens_per_min)),
+        }
+    }
+
+    /// Build from environment: `BG_LLM_PROVIDER` then `BG_LLM_FALLBACK`.
+    ///
+    /// A provider that cannot be configured (no key) is dropped with a warning
+    /// rather than failing startup — a missing OpenAI key should not stop a
+    /// deployment that is running on Anthropic.
+    pub fn from_env() -> Self {
+        let primary = std::env::var("BG_LLM_PROVIDER").unwrap_or_else(|_| "stub".into());
+        let fallback = std::env::var("BG_LLM_FALLBACK").unwrap_or_default();
+
+        let mut names: Vec<String> = vec![primary];
+        names.extend(
+            fallback
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+        );
+        names.dedup();
+
+        let mut chain = build_chain(&names);
+        if chain.is_empty() {
+            warn!("no LLM provider could be configured; falling back to the offline stub");
+            chain.push(Arc::new(stub::StubProvider));
+        }
+        info!(
+            chain = %chain.iter().map(|p| p.name()).collect::<Vec<_>>().join(" -> "),
+            "LLM chain ready"
+        );
+
+        let mut llm = Self::with_pace(chain, pacer::limit_from_env());
+
+        // Per-tier routing, so the volume work and the judgement work can sit
+        // on different machines. `BG_LLM_PROVIDER_FAST=ollama` puts triage,
+        // clustering and distribution copy on the GPU in the rack — where
+        // there is no daily allowance to exhaust — and leaves the Skein and
+        // the Gander on the hosted model, whose entire budget is then spent on
+        // the work that is actually worth a good model.
+        for (tier, key) in [
+            (ModelTier::Fast, "BG_LLM_PROVIDER_FAST"),
+            (ModelTier::Mid, "BG_LLM_PROVIDER_MID"),
+            (ModelTier::Top, "BG_LLM_PROVIDER_TOP"),
+        ] {
+            let Some(spec) = std::env::var(key).ok().filter(|v| !v.trim().is_empty()) else {
+                continue;
+            };
+            let tier_names: Vec<String> = spec
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            let tier_chain = build_chain(&tier_names);
+            if tier_chain.is_empty() {
+                warn!(tier = ?tier, %spec, "tier override configured nothing; leaving on the default chain");
+                continue;
+            }
+            info!(
+                tier = ?tier,
+                chain = %tier_chain.iter().map(|p| p.name()).collect::<Vec<_>>().join(" -> "),
+                "tier routed to its own provider"
+            );
+            llm = llm.with_tier_chain(tier, tier_chain);
+        }
+        llm
+    }
+
+    pub fn primary(&self) -> &dyn LlmProvider {
+        self.chain[0].as_ref()
+    }
+
+    pub fn provider_names(&self) -> Vec<&'static str> {
+        self.chain.iter().map(|p| p.name()).collect()
+    }
+
+    /// Prime the daily ledger from usage already on record.
+    ///
+    /// The in-memory tally starts empty on every restart, which on a metered
+    /// tier means the first pass after a restart spends a budget that is
+    /// already gone. The caller reads what was actually used from the run
+    /// ledger and hands it over.
+    pub fn seed_daily(&self, tier: ModelTier, tokens: u32) {
+        if tokens > 0 {
+            self.pacer.record(tier, tokens);
+        }
+    }
+
+    /// Run a request through the chain.
+    pub async fn complete(&self, req: &Request) -> Result<Completion> {
+        // If the provider has already refused this tier and said how long for,
+        // do not spend a request finding out again.
+        //
+        // Measured on production: 83 refusals in six hours, 69 of them "retry
+        // in 300s", and every agent in the pass discovering it separately —
+        // 28 of 28 Gander runs failed, 29 of 32 Gosling. Failing here costs
+        // nothing and leaves the pass free to do the deterministic work
+        // (polling, mirroring, the Steward) that needs no provider at all.
+        if let Some(left) = self.pacer.cooling_for(req.tier) {
+            debug!(
+                task = %req.task, tier = ?req.tier, wait_s = left.as_secs(),
+                "tier is cooling after a refusal; not calling"
+            );
+            return Err(LlmError::RateLimited {
+                provider: "pacer",
+                retry_after: left,
+            });
+        }
+
+        // Spend the minute deliberately. The retry loop below stays as a
+        // backstop for when this estimate is wrong or something else is using
+        // the same key, but it should now be the exception rather than the
+        // mechanism by which we discover the limit.
+        let reservation = if self.pacer.enabled() && !self.tier_is_local(req.tier) {
+            let cost = pacer::estimate_tokens(&req.system, &req.user, req.max_tokens);
+            Some(self.pacer.acquire(req.tier, cost, &req.task).await)
+        } else {
+            None
+        };
+
+        let mut last: Option<LlmError> = None;
+        for p in self.chain_for(req.tier) {
+            // Rate limits are waited out on the same provider rather than
+            // failed over. A free tier's per-minute token budget is a normal
+            // operating condition, not an outage, and the response says exactly
+            // how long to wait — moving to a different provider would neither
+            // help nor be possible when the chain has one entry.
+            let mut attempt = 0u32;
+            let outcome = loop {
+                match p.complete(req).await {
+                    // Only retry when we intend to wait the *full* time asked.
+                    // Truncating the wait and trying anyway is what turned one
+                    // refusal into three: the provider said 91 seconds, we
+                    // slept 75, and of course it refused again.
+                    Err(LlmError::RateLimited {
+                        provider,
+                        retry_after,
+                    }) if attempt < MAX_RATE_LIMIT_RETRIES
+                        && retry_after <= MAX_RATE_LIMIT_WAIT =>
+                    {
+                        attempt += 1;
+                        warn!(
+                            provider, task = %req.task, attempt,
+                            wait_s = retry_after.as_secs(), "rate limited; waiting"
+                        );
+                        tokio::time::sleep(retry_after).await;
+                    }
+                    other => break other,
+                }
+            };
+            // Whatever the provider last said about waiting, remember it for
+            // the tier rather than for this one call. Without that, the next
+            // twenty-seven stages in the pass each discover the same refusal
+            // separately, sleeping through it one at a time.
+            if let Err(LlmError::RateLimited { retry_after, .. }) = &outcome {
+                self.pacer.cooling(req.tier, *retry_after);
+                // A wait measured in minutes is the daily allowance, not a busy
+                // minute — the newsroom is about to go quiet on this tier and
+                // should say so out loud rather than at debug level. Silence
+                // that nobody can see is how "the worker is running fine" and
+                // "nothing has published since Tuesday" coexist.
+                if retry_after.as_secs() >= 120 {
+                    warn!(
+                        tier = ?req.tier,
+                        wait_min = retry_after.as_secs() / 60,
+                        "provider allowance exhausted; this tier is parked until it resets"
+                    );
+                }
+            }
+            match outcome {
+                Ok(c) => {
+                    // Give back whatever the estimate over-reserved. The output
+                    // ceiling is usually far above the real reply, so without
+                    // this the budget drains several times faster than the tier
+                    // requires and the newsroom paces itself to a crawl.
+                    if let Some(r) = reservation {
+                        self.pacer.settle(r, c.prompt_tokens + c.completion_tokens);
+                    }
+                    // The provider's own meter overrides our estimate.
+                    self.pacer
+                        .observe(req.tier, c.rate_remaining_tokens, c.rate_reset);
+                    self.pacer.observe_requests(
+                        req.tier,
+                        c.rate_remaining_requests,
+                        c.rate_reset_requests,
+                    );
+                    return Ok(c);
+                }
+                Err(e) if e.is_retryable() => {
+                    warn!(provider = p.name(), task = %req.task, error = %e, "falling through");
+                    last = Some(e);
+                }
+                // A refusal or a schema violation is the model's answer, not an
+                // outage — return it rather than shopping for a provider that
+                // says something else.
+                Err(e) => return Err(e),
+            }
+        }
+        Err(LlmError::AllProvidersFailed(
+            last.map(|e| e.to_string())
+                .unwrap_or_else(|| "empty chain".into()),
+        ))
+    }
+
+    /// Request structured output and deserialize it.
+    pub async fn complete_json<T: serde::de::DeserializeOwned>(
+        &self,
+        req: &Request,
+    ) -> Result<(T, Completion)> {
+        debug_assert!(req.json_schema.is_some(), "complete_json without a schema");
+        let c = self.complete(req).await?;
+        let v = c.parse_into::<T>()?;
+        Ok((v, c))
+    }
+}
+
+impl std::fmt::Debug for Llm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Llm")
+            .field("chain", &self.provider_names())
+            .finish()
+    }
+}
+
+/// Shared HTTP client for the network-backed providers.
+pub(crate) fn http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        // Generous: a top-tier model reasoning over a large claim set can take
+        // well over a minute.
+        .timeout(std::time::Duration::from_secs(180))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .expect("http client")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refusals_and_schema_violations_are_not_retried() {
+        assert!(!LlmError::Refused {
+            category: "cyber".into()
+        }
+        .is_retryable());
+        assert!(!LlmError::SchemaViolation("missing field".into()).is_retryable());
+        assert!(!LlmError::BadJson {
+            detail: "x".into(),
+            raw: String::new()
+        }
+        .is_retryable());
+    }
+
+    #[test]
+    fn rate_limits_and_server_errors_are_retried() {
+        assert!(LlmError::Api {
+            provider: "anthropic",
+            status: 429,
+            body: String::new()
+        }
+        .is_retryable());
+        assert!(LlmError::Api {
+            provider: "anthropic",
+            status: 529,
+            body: String::new()
+        }
+        .is_retryable());
+        assert!(!LlmError::Api {
+            provider: "anthropic",
+            status: 400,
+            body: String::new()
+        }
+        .is_retryable());
+    }
+
+    #[tokio::test]
+    async fn the_chain_falls_through_to_the_stub() {
+        // A provider that always fails with a retryable error, then the stub.
+        struct Broken;
+        #[async_trait]
+        impl LlmProvider for Broken {
+            fn name(&self) -> &'static str {
+                "broken"
+            }
+            fn spec(&self, _: ModelTier) -> ModelSpec {
+                pricing::STUB
+            }
+            async fn complete(&self, _: &Request) -> Result<Completion> {
+                Err(LlmError::Api {
+                    provider: "broken",
+                    status: 503,
+                    body: "down".into(),
+                })
+            }
+            async fn health(&self) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        let llm = Llm::new(vec![Arc::new(Broken), Arc::new(stub::StubProvider)]);
+        let req = Request::new("t", ModelTier::Fast, "sys", "user");
+        let out = llm.complete(&req).await.unwrap();
+        assert_eq!(out.provider, "stub", "should have fallen through");
+    }
+
+    #[tokio::test]
+    async fn a_refusal_stops_the_chain_instead_of_shopping_providers() {
+        struct Refuser;
+        #[async_trait]
+        impl LlmProvider for Refuser {
+            fn name(&self) -> &'static str {
+                "refuser"
+            }
+            fn spec(&self, _: ModelTier) -> ModelSpec {
+                pricing::STUB
+            }
+            async fn complete(&self, _: &Request) -> Result<Completion> {
+                Err(LlmError::Refused {
+                    category: "cyber".into(),
+                })
+            }
+            async fn health(&self) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        let llm = Llm::new(vec![Arc::new(Refuser), Arc::new(stub::StubProvider)]);
+        let req = Request::new("t", ModelTier::Fast, "sys", "user");
+        assert!(matches!(
+            llm.complete(&req).await,
+            Err(LlmError::Refused { .. })
+        ));
+    }
+}
+
+#[cfg(test)]
+mod rate_limit_policy {
+    use super::*;
+
+    /// Sleeping less than the provider asked for guarantees the retry is
+    /// refused too. Observed live: Groq asked 91s, the cap was 75s, and three
+    /// attempts burned 225 seconds without a single one able to succeed.
+    #[test]
+    fn a_wait_longer_than_we_will_sit_through_is_not_retried() {
+        let asked = std::time::Duration::from_secs(91);
+        assert!(
+            asked <= MAX_RATE_LIMIT_WAIT,
+            "91s was a real production figure; the ceiling must accommodate it"
+        );
+
+        let too_long = std::time::Duration::from_secs(3_600);
+        assert!(
+            too_long > MAX_RATE_LIMIT_WAIT,
+            "an hour-long quota reset is an outage, not something to sleep through"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tier_routing_tests {
+    use super::*;
+
+    /// The whole point of the split: the volume tier can move to a machine
+    /// with no daily allowance while the judgement tiers stay on the best
+    /// model available. If the override leaked across tiers, triage moving
+    /// local would quietly take the Skein with it.
+    #[test]
+    fn only_the_routed_tier_changes_provider() {
+        let default_chain: Vec<Arc<dyn LlmProvider>> = vec![Arc::new(stub::StubProvider)];
+        let local: Vec<Arc<dyn LlmProvider>> =
+            vec![Arc::new(stub::StubProvider), Arc::new(stub::StubProvider)];
+        let llm = Llm::new(default_chain).with_tier_chain(ModelTier::Fast, local);
+
+        assert_eq!(llm.chain_for(ModelTier::Fast).len(), 2, "Fast is routed");
+        assert_eq!(llm.chain_for(ModelTier::Mid).len(), 1, "Mid is untouched");
+        assert_eq!(llm.chain_for(ModelTier::Top).len(), 1, "Top is untouched");
+    }
+
+    #[test]
+    fn an_empty_override_leaves_the_tier_alone() {
+        // A misconfigured override must not silently strand a tier with no
+        // provider at all — it falls back to the chain that already works.
+        let llm = Llm::new(vec![Arc::new(stub::StubProvider) as Arc<dyn LlmProvider>])
+            .with_tier_chain(ModelTier::Top, vec![]);
+        assert_eq!(llm.chain_for(ModelTier::Top).len(), 1);
+    }
+
+    /// `None` shares the Fast slot, so a deterministic stage must not be
+    /// routed somewhere unexpected by a Fast override.
+    #[test]
+    fn the_no_model_tier_resolves_to_a_real_chain() {
+        let llm = Llm::new(vec![Arc::new(stub::StubProvider) as Arc<dyn LlmProvider>]);
+        assert_eq!(llm.chain_for(ModelTier::None).len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod local_pacing_tests {
+    use super::*;
+
+    struct Local;
+    #[async_trait]
+    impl LlmProvider for Local {
+        fn name(&self) -> &'static str {
+            "local"
+        }
+        fn spec(&self, _t: ModelTier) -> ModelSpec {
+            stub::StubProvider.spec(_t)
+        }
+        async fn complete(&self, _r: &Request) -> Result<Completion> {
+            unreachable!("not called in this test")
+        }
+        async fn health(&self) -> Result<()> {
+            Ok(())
+        }
+        fn is_local(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn a_locally_served_tier_is_not_paced() {
+        // The GPU has no allowance to protect. Pacing it to a hosted
+        // provider's per-minute budget throttled 270 headlines a minute down
+        // to about 28, on behalf of an API that was not being called.
+        let llm = Llm::new(vec![Arc::new(stub::StubProvider) as Arc<dyn LlmProvider>])
+            .with_tier_chain(ModelTier::Fast, vec![Arc::new(Local)]);
+        assert!(llm.tier_is_local(ModelTier::Fast));
+        assert!(
+            !llm.tier_is_local(ModelTier::Top),
+            "the hosted tiers must still be paced"
+        );
+    }
+
+    #[test]
+    fn a_tier_that_falls_back_to_a_hosted_provider_is_still_paced() {
+        // All of them local, not just the first: the fallback spends a real
+        // allowance and the budget has to be respected when it is reached.
+        let llm = Llm::new(vec![Arc::new(stub::StubProvider) as Arc<dyn LlmProvider>])
+            .with_tier_chain(
+                ModelTier::Fast,
+                vec![Arc::new(Local), Arc::new(stub::StubProvider)],
+            );
+        assert!(!llm.tier_is_local(ModelTier::Fast));
+    }
+}

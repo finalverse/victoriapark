@@ -1,0 +1,26 @@
+name: victoriapark
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: victoriapark-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: victoriapark
+      POSTGRES_PASSWORD: victoriapark
+      POSTGRES_DB: victoriapark
+      # deterministic collation so slugs/sorts behave the same everywhere
+      POSTGRES_INITDB_ARGS: "--locale=C --encoding=UTF8"
+    ports:
+      # 55432 is taken by another project's Postgres on this machine.
+      - "55434:5432"
+    volumes:
+      - victoriapark-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U victoriapark -d victoriapark"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  victoriapark-pgdata:

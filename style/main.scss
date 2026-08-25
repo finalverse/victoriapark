@@ -1,0 +1,1714 @@
+/* ==========================================================================
+   VictoriaPark design system
+   --------------------------------------------------------------------------
+   Deep park green, warm paper and antique gold; serif display, mono numerals.
+
+   Two constraints shaped this:
+
+   1. No webfonts. Every family is a system stack, so there is no external
+      request, no layout shift, and no font-loading flash on a page whose whole
+      value proposition is being fast and trustworthy.
+   2. Provenance is a first-class visual element, not a footnote. Confidence
+      meters, source chips and verification badges get the same design care as
+      the headline typography, because they are the product.
+   ========================================================================== */
+
+:root {
+  /* -- ink ---------------------------------------------------------------- */
+  --ink-900: #021b14;
+  --ink-800: #052a21;   /* page */
+  --ink-700: #07362b;   /* panel */
+  --ink-600: #0a4033;   /* raised panel */
+  --line:    #1d5143;
+  --line-soft: #123e33;
+
+  /* -- paper -------------------------------------------------------------- */
+  --paper:   #f5efdf;   /* primary text — warm, not pure white */
+  --paper-dim: #d7ceb9;
+  --muted:   #a99f89;
+  --faint:   #7f8f84;
+
+  /* -- goose gold --------------------------------------------------------- */
+  --gold:      #d2ab55;
+  --gold-warm: #bd8f39;
+  --gold-dim:  rgba(210, 171, 85, 0.14);
+  --gold-line: rgba(210, 171, 85, 0.38);
+
+  /* -- signal ------------------------------------------------------------- */
+  --up:   #3fbf7f;
+  --down: #f2545b;
+
+  /* -- verification ------------------------------------------------------- */
+  --v-primary:      #5aa9e6;
+  --v-corroborated: #3fbf7f;
+  --v-single:       #e8a317;
+  --v-unverified:   #838c97;
+  --v-disputed:     #f0883e;
+  --v-refuted:      #f2545b;
+
+  /* -- type --------------------------------------------------------------- */
+  --serif: "Songti SC", "Noto Serif CJK SC", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua",
+           Georgia, "Times New Roman", serif;
+  --sans: "PingFang SC", "Noto Sans CJK SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+          system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* -- metrics ------------------------------------------------------------ */
+  --shell: 1240px;
+  --column: 44rem;
+  --r: 4px;
+  --r-lg: 8px;
+}
+
+/* Light theme. Kept genuinely readable rather than an inverted afterthought —
+   a lot of readers browse in daylight on a phone. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ink-900: #fffdf7;
+    --ink-800: #f7f1e3;
+    --ink-700: #ffffff;
+    --ink-600: #f3f1ec;
+    --line: #e2ded4;
+    --line-soft: #ebe8e0;
+    --paper: #0b3429;
+    --paper-dim: #315b4d;
+    --muted: #666e78;
+    --faint: #8b939d;
+    --gold: #a97400;
+    --gold-warm: #8d6100;
+    --gold-dim: rgba(169, 116, 0, 0.10);
+    --gold-line: rgba(169, 116, 0, 0.28);
+    --up: #10794c;
+    --down: #c02631;
+    --v-corroborated: #10794c;
+    --v-single: #8d6100;
+    --v-refuted: #c02631;
+  }
+}
+
+:root[data-theme="light"] {
+  --ink-900: #fffdf7;
+  --ink-800: #f7f1e3;
+  --ink-700: #ffffff;
+  --ink-600: #f3f1ec;
+  --line: #e2ded4;
+  --line-soft: #ebe8e0;
+  --paper: #0b3429;
+  --paper-dim: #315b4d;
+  --muted: #666e78;
+  --faint: #8b939d;
+  --gold: #a97400;
+  --gold-warm: #8d6100;
+  --gold-dim: rgba(169, 116, 0, 0.10);
+  --gold-line: rgba(169, 116, 0, 0.28);
+  --up: #10794c;
+  --down: #c02631;
+  --v-corroborated: #10794c;
+  --v-single: #8d6100;
+  --v-refuted: #c02631;
+}
+
+/* ==========================================================================
+   base
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--ink-800);
+  color: var(--paper);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: inherit; text-decoration: none; }
+a:hover { color: var(--gold); }
+
+h1, h2, h3, h4 {
+  font-family: var(--serif);
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.012em;
+  margin: 0;
+}
+
+/* Numbers are data. Tabular figures stop columns from jittering as prices
+   tick, which is the difference between a live feed and a nervous one. */
+.num, time, .price, .stat-value, .meter-value {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.shell {
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ==========================================================================
+   honk bar — breaking news
+   ========================================================================== */
+
+.honk {
+  background: var(--gold);
+  color: #14100a;
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
+}
+
+.honk .shell {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding-top: 0.5rem; padding-bottom: 0.5rem;
+}
+
+.honk-tag {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  text-transform: uppercase; letter-spacing: 0.09em;
+  font-size: 0.68rem; font-weight: 800;
+  white-space: nowrap;
+}
+
+.honk-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #14100a;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+.honk-text {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .honk-dot { animation: none; }
+  html { scroll-behavior: auto; }
+  .ticker-track { animation: none !important; }
+}
+
+/* ==========================================================================
+   ticker
+   ========================================================================== */
+
+.ticker {
+  background: var(--ink-900);
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  font-size: 0.78rem;
+}
+
+.ticker-track {
+  display: flex; gap: 1.75rem;
+  padding: 0.45rem 1.25rem;
+  white-space: nowrap;
+  animation: marquee 70s linear infinite;
+  width: max-content;
+}
+
+.ticker:hover .ticker-track { animation-play-state: paused; }
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.tick { display: inline-flex; align-items: baseline; gap: 0.45rem; }
+.tick-sym { font-weight: 700; letter-spacing: 0.04em; color: var(--paper-dim); }
+.tick-px  { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tick-chg { font-family: var(--mono); font-size: 0.72rem; }
+.up   { color: var(--up); }
+.down { color: var(--down); }
+
+/* ==========================================================================
+   masthead
+   ========================================================================== */
+
+.masthead {
+  border-bottom: 1px solid var(--line);
+  background: var(--ink-800);
+  position: sticky; top: 0; z-index: 40;
+  backdrop-filter: saturate(1.4) blur(8px);
+}
+
+.masthead .shell {
+  display: flex; align-items: center; gap: 1.5rem;
+  height: 60px;
+}
+
+.brand {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  font-family: var(--serif); font-size: 1.4rem; font-weight: 700;
+  letter-spacing: -0.02em; color: var(--paper);
+  flex-shrink: 0;
+}
+
+.brand:hover { color: var(--paper); }
+.brand-mark { display: block; object-fit: contain; }
+.brand-bit { color: var(--paper); }
+.brand-goose { color: var(--gold); }
+
+.nav {
+  display: flex; align-items: center; gap: 1.15rem;
+  font-size: 0.87rem; font-weight: 500;
+  overflow-x: auto; scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.nav::-webkit-scrollbar { display: none; }
+
+.nav a {
+  color: var(--paper-dim);
+  padding: 0.35rem 0;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.nav a:hover { color: var(--paper); }
+.nav a.on { color: var(--gold); border-bottom-color: var(--gold); }
+
+.masthead-right { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; }
+.language-switch {
+  color: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.language-switch:hover { color: var(--gold); border-color: var(--gold-line); }
+
+/* On a phone the brand, six sections and the toggle cannot share one 60px row:
+   the nav was squeezed to about a section and a half and clipped mid-word. It
+   remained scrollable, but with the scrollbar hidden nothing said so — Flyway,
+   The Flock and Standards were effectively unreachable on mobile. Below this
+   width the nav drops onto its own full-width row, and the mask fades its
+   trailing edge so it reads as "there is more this way". */
+@media (max-width: 760px) {
+  .masthead .shell {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 0 1rem;
+    padding-top: 0.55rem;
+    padding-bottom: 0.15rem;
+  }
+  .masthead-right { order: 1; }
+  .nav {
+    order: 2;
+    width: 100%;
+    gap: 1.05rem;
+    padding-bottom: 0.2rem;
+    mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+  }
+  /* Reclaims the width the fade costs, so the last section can still be read
+     in full once scrolled to the end. */
+  .nav::after { content: ""; flex: 0 0 1.25rem; }
+}
+
+.theme-toggle {
+  background: transparent; border: 1px solid var(--line);
+  color: var(--muted); border-radius: var(--r);
+  width: 30px; height: 30px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 0.85rem; line-height: 1;
+}
+.theme-toggle:hover { color: var(--gold); border-color: var(--gold-line); }
+
+/* ==========================================================================
+   layout
+   ========================================================================== */
+
+/* Vertical only. This is always used as `class="shell page"`, and the shorthand
+   `padding: 2rem 0 4rem` silently reset the 1.25rem side padding `.shell` had
+   just set — same specificity, later rule wins. A wide viewport hid it, since
+   `max-width` plus `margin: 0 auto` left slack either side; once the viewport
+   was narrower than the shell there was no slack and every page ran its text
+   flush into both edges of the screen. */
+.page { padding-top: 2rem; padding-bottom: 4rem; }
+
+.page-head { margin-bottom: 1.75rem; }
+.page-head h1 { font-size: clamp(1.75rem, 4vw, 2.4rem); }
+.page-head .lede {
+  color: var(--muted); margin-top: 0.5rem;
+  font-size: 0.98rem; max-width: 46rem;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 2.15fr) minmax(0, 1fr);
+  gap: 2.5rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .split { grid-template-columns: 1fr; gap: 2rem; }
+}
+
+.rail-title {
+  font-family: var(--sans);
+  font-size: 0.7rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.14em;
+  color: var(--muted);
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.rail-title a { color: var(--gold); font-weight: 700; letter-spacing: 0.06em; }
+
+/* ==========================================================================
+   story cards
+   ========================================================================== */
+
+.lead-story { border-bottom: 1px solid var(--line); padding-bottom: 1.75rem; margin-bottom: 1.75rem; }
+.lead-story h2 {
+  font-size: clamp(1.7rem, 4.2vw, 2.65rem);
+  line-height: 1.08; margin: 0.5rem 0 0.65rem;
+}
+.lead-story .dek { color: var(--paper-dim); font-size: 1.05rem; line-height: 1.55; }
+
+.card { padding: 1.15rem 0; border-bottom: 1px solid var(--line-soft); }
+.card:last-child { border-bottom: none; }
+.card h3 { font-size: 1.18rem; line-height: 1.25; margin-bottom: 0.35rem; }
+.card .dek { color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+
+.card-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0 2rem;
+}
+
+/* meta line */
+.meta {
+  display: flex; align-items: center; gap: 0.55rem;
+  font-size: 0.72rem; color: var(--faint);
+  flex-wrap: wrap;
+}
+.meta time { font-size: 0.72rem; }
+.meta .dot { opacity: 0.4; }
+
+.kicker {
+  font-size: 0.67rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.13em;
+  color: var(--gold);
+}
+
+/* ==========================================================================
+   badges & chips
+   ========================================================================== */
+
+.badge {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.65rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  padding: 0.15rem 0.42rem;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: ""; width: 5px; height: 5px; border-radius: 50%;
+  background: currentColor;
+}
+
+.v-primary_verified { color: var(--v-primary); }
+.v-corroborated     { color: var(--v-corroborated); }
+.v-single_source    { color: var(--v-single); }
+.v-unverified       { color: var(--v-unverified); }
+.v-disputed         { color: var(--v-disputed); }
+.v-refuted          { color: var(--v-refuted); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.72rem;
+  padding: 0.18rem 0.5rem;
+  background: var(--ink-600);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--paper-dim);
+}
+.chip:hover { border-color: var(--gold-line); color: var(--gold); }
+.chip-trust { font-family: var(--mono); font-size: 0.65rem; color: var(--faint); }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+.src-count {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  font-size: 0.7rem; font-family: var(--mono);
+  color: var(--muted);
+}
+.src-count strong { color: var(--paper-dim); font-weight: 700; }
+
+/* ==========================================================================
+   article
+   ========================================================================== */
+
+.article-head { max-width: var(--column); margin-bottom: 2rem; }
+.article-head h1 {
+  font-size: clamp(1.9rem, 5vw, 3rem);
+  line-height: 1.06; margin: 0.65rem 0 0.85rem;
+}
+.article-head .dek {
+  font-size: 1.15rem; color: var(--paper-dim);
+  line-height: 1.5; font-family: var(--serif);
+}
+
+.byline {
+  display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  margin-top: 1.15rem; padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem; color: var(--muted);
+}
+
+.prose {
+  max-width: var(--column);
+  font-family: var(--serif);
+  font-size: 1.11rem;
+  line-height: 1.72;
+  color: var(--paper);
+}
+.prose p { margin: 0 0 1.15rem; }
+.prose h2 {
+  font-size: 1.35rem; margin: 2.25rem 0 0.85rem;
+  padding-bottom: 0.4rem; border-bottom: 1px solid var(--line);
+}
+.prose ul { padding-left: 1.15rem; margin: 0 0 1.15rem; }
+.prose li { margin-bottom: 0.45rem; }
+.prose a { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
+.prose hr { border: none; border-top: 1px solid var(--line); margin: 2rem 0; }
+.prose em { color: var(--muted); font-size: 0.92rem; }
+
+/* Inline citation marker. Made obviously interactive: the claim ledger is the
+   point of the page, so the affordance to reach it should be visible. */
+.cite {
+  display: inline-block;
+  font-family: var(--mono); font-size: 0.66em;
+  vertical-align: super; line-height: 1;
+  color: var(--gold);
+  background: var(--gold-dim);
+  border: 1px solid var(--gold-line);
+  border-radius: 3px;
+  padding: 0.1em 0.28em;
+  margin-left: 0.12em;
+  text-decoration: none;
+}
+.cite:hover { background: var(--gold); color: var(--ink-900); }
+
+/* ==========================================================================
+   claim ledger — the differentiator
+   ========================================================================== */
+
+.ledger { position: sticky; top: 76px; }
+
+.claim {
+  background: var(--ink-700);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--v-unverified);
+  border-radius: var(--r);
+  padding: 0.85rem 0.9rem;
+  margin-bottom: 0.7rem;
+  scroll-margin-top: 80px;
+}
+
+.claim.v-primary_verified { border-left-color: var(--v-primary); }
+.claim.v-corroborated     { border-left-color: var(--v-corroborated); }
+.claim.v-single_source    { border-left-color: var(--v-single); }
+.claim.v-disputed         { border-left-color: var(--v-disputed); }
+.claim.v-refuted          { border-left-color: var(--v-refuted); }
+
+.claim:target {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-dim);
+}
+
+.claim-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem; margin-bottom: 0.5rem;
+}
+.claim-marker {
+  font-family: var(--mono); font-size: 0.68rem;
+  color: var(--gold); font-weight: 700;
+}
+.claim-text { font-size: 0.88rem; line-height: 1.5; color: var(--paper); }
+
+.meter {
+  height: 3px; background: var(--line);
+  border-radius: 2px; overflow: hidden;
+  margin: 0.6rem 0 0.5rem;
+}
+.meter-fill { height: 100%; border-radius: 2px; }
+
+.claim-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 0.68rem; color: var(--faint);
+  font-family: var(--mono);
+}
+
+.excerpt {
+  font-family: var(--serif); font-style: italic;
+  font-size: 0.82rem; color: var(--muted);
+  border-left: 2px solid var(--line);
+  padding-left: 0.6rem; margin: 0.55rem 0;
+}
+
+/* ==========================================================================
+   panels, stats, tables
+   ========================================================================== */
+
+.panel {
+  background: var(--ink-700);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 1.1rem;
+}
+
+.stat-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  overflow: hidden; margin-bottom: 2rem;
+}
+.stat {
+  background: var(--ink-700);
+  padding: 0.9rem 1rem;
+}
+/* The grid draws its gaps by letting the container colour show through, so a
+   final row that does not divide evenly leaves a tile-sized block of that
+   colour sitting there looking like a rendering fault. An odd tile at the end
+   spans the remainder instead.
+   Scoped to the width where `auto-fit` is guaranteed to give exactly two
+   columns (below 3 x 130px plus the shell's side padding) — `nth-child(odd)`
+   only identifies a short final row when the count is two. */
+@media (max-width: 430px) {
+  .stat-row > .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+.stat-label {
+  font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.11em;
+  color: var(--muted); font-weight: 700; margin-bottom: 0.35rem;
+}
+.stat-value { font-size: 1.4rem; font-weight: 600; color: var(--paper); }
+.stat-value.gold { color: var(--gold); }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+th {
+  text-align: left; font-size: 0.66rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--muted); padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+td { padding: 0.6rem 0.7rem; border-bottom: 1px solid var(--line-soft); }
+tr:last-child td { border-bottom: none; }
+td.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+th.n { text-align: right; }
+
+.scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ==========================================================================
+   the flock
+   ========================================================================== */
+
+.flock-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+
+.agent {
+  background: var(--ink-700);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+.agent::before {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 3px;
+  background: var(--line);
+}
+.agent.active::before { background: var(--gold); }
+.agent.failing::before { background: var(--down); }
+
+.agent-name {
+  font-family: var(--serif); font-size: 1.1rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.agent-tier {
+  font-family: var(--mono); font-size: 0.6rem;
+  text-transform: uppercase; letter-spacing: 0.09em;
+  color: var(--faint); border: 1px solid var(--line);
+  padding: 0.1rem 0.3rem; border-radius: 3px;
+}
+.agent-beat { font-size: 0.78rem; color: var(--muted); margin: 0.3rem 0 0.75rem; line-height: 1.45; }
+
+.agent-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem; font-family: var(--mono); font-size: 0.75rem;
+  padding-top: 0.7rem; border-top: 1px solid var(--line-soft);
+}
+.agent-stat-label { font-size: 0.58rem; color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; font-family: var(--sans); }
+
+// Why an agent is failing, not just how often. Sits above the note because
+// the note is from a run that succeeded and reads reassuringly.
+// The overflow menu in the desk bar. Native <details>, so it works before
+// hydration and with the keyboard; the only job here is to lift the panel out
+// of the flow so it does not push the ticker strip down when opened.
+.desk-more {
+  position: relative;
+  display: inline-block;
+
+  > summary {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    &::-webkit-details-marker { display: none; }
+    &::after { content: " \25BE"; font-size: 0.8em; opacity: 0.7; }
+  }
+
+  &[open] > summary { color: var(--gold); }
+}
+
+.desk-more-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(7rem, 1fr));
+  gap: 0.15rem 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--ink-600);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.desk-more-link {
+  display: block;
+  padding: 0.3rem 0.2rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  color: var(--paper);
+  text-decoration: none;
+  border-radius: 4px;
+  &:hover { color: var(--gold); background: var(--gold-dim); }
+}
+
+// On a narrow screen the panel is the width of the viewport, not the trigger.
+@media (max-width: 640px) {
+  .desk-more-panel {
+    grid-template-columns: repeat(2, minmax(6rem, 1fr));
+    left: auto;
+    right: 0;
+  }
+}
+
+.agent-trouble {
+  font-size: 0.72rem;
+  color: var(--down);
+  background: rgba(242, 84, 91, 0.09);
+  border-left: 2px solid var(--down);
+  padding: 0.4rem 0.55rem;
+  border-radius: 0 3px 3px 0;
+  margin-top: 0.6rem;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  line-clamp: 3;
+}
+
+.agent-note {
+  font-size: 0.72rem; color: var(--faint);
+  margin-top: 0.6rem; font-style: italic;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  line-clamp: 2;
+}
+
+.activity {
+  font-family: var(--mono); font-size: 0.74rem;
+  line-height: 1.75;
+}
+.activity-row {
+  display: grid; grid-template-columns: 62px 84px 1fr auto;
+  gap: 0.6rem; padding: 0.22rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  align-items: baseline;
+}
+.activity-role { color: var(--gold); font-weight: 700; }
+.activity-note { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-cost { color: var(--faint); text-align: right; }
+.status-ok { color: var(--up); }
+.status-failed { color: var(--down); }
+.status-budgeted, .status-skipped { color: var(--v-single); }
+.status-running { color: var(--v-primary); }
+
+/* ==========================================================================
+   wire
+   ========================================================================== */
+
+.wire-item {
+  display: grid; grid-template-columns: 4.5rem 1fr;
+  gap: 1rem; padding: 1rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.wire-time {
+  font-family: var(--mono); font-size: 0.72rem;
+  color: var(--faint); padding-top: 0.15rem;
+}
+.wire-title { font-family: var(--serif); font-size: 1.08rem; line-height: 1.3; margin-bottom: 0.3rem; }
+.wire-summary { font-size: 0.86rem; color: var(--muted); line-height: 1.55; }
+.wire-foot { margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  .wire-item { grid-template-columns: 1fr; gap: 0.35rem; }
+}
+
+/* -- outbound link marker -------------------------------------------------
+   The Wire points at other people's reporting. Marking that visually is an
+   editorial commitment, not decoration: a reader should never be unsure
+   whether they are about to leave. */
+.out::after {
+  content: "↗";
+  font-size: 0.75em; margin-left: 0.22em;
+  color: var(--gold); opacity: 0.75;
+}
+
+/* ==========================================================================
+   footer
+   ========================================================================== */
+
+.footer {
+  border-top: 1px solid var(--line);
+  background: var(--ink-900);
+  padding: 2.5rem 0 3rem;
+  margin-top: 4rem;
+  font-size: 0.83rem;
+  color: var(--muted);
+}
+.footer-grid {
+  display: grid; grid-template-columns: 1.6fr repeat(3, 1fr);
+  gap: 2rem;
+}
+@media (max-width: 760px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+}
+.footer h4 {
+  font-family: var(--sans); font-size: 0.66rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.13em;
+  color: var(--paper-dim); margin-bottom: 0.7rem;
+}
+.footer ul { list-style: none; padding: 0; margin: 0; }
+.footer li { margin-bottom: 0.4rem; }
+.footer a { color: var(--muted); }
+.footer a:hover { color: var(--gold); }
+
+.disclosure {
+  margin-top: 2rem; padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.78rem; color: var(--faint);
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+}
+
+/* ==========================================================================
+   utility
+   ========================================================================== */
+
+.empty {
+  padding: 3rem 1rem; text-align: center;
+  color: var(--muted); font-size: 0.9rem;
+  border: 1px dashed var(--line); border-radius: var(--r-lg);
+}
+.empty code {
+  font-family: var(--mono); font-size: 0.82rem;
+  background: var(--ink-600); padding: 0.15rem 0.4rem;
+  border-radius: 3px; color: var(--gold);
+}
+
+.loading { color: var(--faint); font-size: 0.85rem; padding: 1.5rem 0; }
+
+.callout {
+  background: var(--gold-dim);
+  border: 1px solid var(--gold-line);
+  border-radius: var(--r-lg);
+  padding: 1rem 1.15rem;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+.callout strong { color: var(--gold); }
+
+pre {
+  background: var(--ink-900); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 0.9rem 1rem;
+  overflow-x: auto; font-family: var(--mono); font-size: 0.8rem;
+  line-height: 1.6; color: var(--paper-dim);
+}
+code { font-family: var(--mono); font-size: 0.88em; }
+
+.mt-0 { margin-top: 0; }
+.mt-2 { margin-top: 2rem; }
+.mb-1 { margin-bottom: 1rem; }
+
+/* ==========================================================================
+   media — publishers' images, hotlinked and credited
+   ==========================================================================
+   Every one of these reserves its aspect ratio before the image arrives.
+   Without that, a page of lazy-loaded remote images shoves its own headlines
+   down as each one lands, which on a slow connection is most of the visit. */
+
+.media {
+  margin: 0;
+  overflow: hidden;
+  background: var(--ink-700);
+  border-radius: var(--r);
+  position: relative;
+}
+.media[hidden] { display: none; }
+
+.media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Fades in rather than snapping, which hides the last of the decode. */
+  animation: media-in 0.25s ease both;
+}
+@keyframes media-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .media img { animation: none; }
+}
+
+.media figcaption {
+  font-family: var(--sans);
+  font-size: 0.68rem;
+  color: var(--faint);
+  padding: 0.4rem 0.1rem 0;
+  letter-spacing: 0.01em;
+}
+.media figcaption a { color: var(--muted); }
+.media figcaption a:hover { color: var(--gold); }
+
+/* 16:9 for anything editorial; feeds overwhelmingly ship that ratio, so it
+   crops least. */
+.media-lead, .media-hero { aspect-ratio: 16 / 9; }
+.media-card { aspect-ratio: 16 / 9; margin-bottom: 0.7rem; }
+.media-thumb { aspect-ratio: 1 / 1; }
+
+/* The caption must not be clipped by the ratio box, so the ratio goes on the
+   image rather than the figure wherever a caption is shown. */
+.media-lead, .media-hero { aspect-ratio: auto; }
+.media-lead img, .media-hero img { aspect-ratio: 16 / 9; }
+
+.media-lead { margin-top: 1.25rem; }
+.media-hero { margin: 1.5rem 0 2rem; }
+
+.lead-media-link, .card-media-link, .wire-thumb-link { display: block; }
+
+/* Wire rows gain a third column for the thumb — the base rule is `4.5rem 1fr`,
+   and dropping a third child into a two-column grid would wrap it onto its own
+   row. */
+.wire-item {
+  align-items: start;
+  grid-template-columns: 4.5rem 92px 1fr;
+}
+.wire-thumb-link { width: 92px; }
+
+@media (max-width: 640px) {
+  /* Below this the thumb costs more width than it earns. */
+  .wire-thumb-link { display: none; }
+  .wire-item { grid-template-columns: 1fr; }
+  .media-hero { margin: 1rem 0 1.5rem; }
+}
+
+/* ---------------------------------------------------------------------------
+   Video
+   --------------------------------------------------------------------------- */
+
+/* The player owns its box before it loads. Without a reserved aspect box the
+   iframe arrives at zero height and the whole article jumps down the page when
+   it paints — the worst layout shift on the site, on the element the reader is
+   most likely looking at. */
+.video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(120% 140% at 50% 0%, rgba(245, 179, 1, 0.10), transparent 60%),
+    var(--ink-700);
+  border: 1px solid var(--line);
+}
+
+.video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.media-video { margin: 1.5rem 0 2rem; }
+.media-video figcaption { justify-content: flex-start; gap: 0.35rem; }
+
+/* Play badge for a video in a list, where the thumbnail is a still and the
+   reader needs to know it moves before they click. */
+.media-play {
+  position: relative;
+}
+
+.media-play::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3rem;
+  height: 3rem;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(11, 13, 16, 0.68);
+  border: 1.5px solid var(--gold);
+  /* The triangle is drawn with a clipped square rather than a glyph so it
+     stays optically centred at any size — the ▶ character is not. */
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.media-play::before {
+  content: "";
+  position: absolute;
+  left: calc(50% + 0.14rem);
+  top: 50%;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  border-style: solid;
+  border-width: 0.42rem 0 0.42rem 0.7rem;
+  border-color: transparent transparent transparent var(--gold);
+}
+
+a:hover > .media-play::after,
+.card:hover .media-play::after {
+  background: rgba(11, 13, 16, 0.85);
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+/* ---------------------------------------------------------------------------
+   Signature: the skein
+   ---------------------------------------------------------------------------
+   Geese migrate in a V. It is the one shape the brand owns, so it does the
+   work an ornamental rule would otherwise do — separating major sections
+   without another grey line, of which the page already has plenty. */
+
+.skein {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 2.5rem 0 1.75rem;
+  color: var(--faint);
+}
+
+.skein::before,
+.skein::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}
+
+.skein span {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.skein-mark {
+  color: var(--gold);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  opacity: 0.85;
+}
+
+/* ---------------------------------------------------------------------------
+   Editorial polish
+   --------------------------------------------------------------------------- */
+
+/* Optical tightening. Large display serif set at body tracking reads loose;
+   the bigger the type, the less space it wants between letters. */
+.lead-story h2 { letter-spacing: -0.021em; }
+.story-title   { letter-spacing: -0.019em; }
+
+/* Images in a card breathe on hover — a small, cheap signal that the whole
+   card is a target, without moving any text. */
+.card .media img,
+.wire-item .media img {
+  transition: transform 0.4s cubic-bezier(0.2, 0.7, 0.2, 1);
+  will-change: transform;
+}
+.card:hover .media img,
+.wire-item:hover .media img { transform: scale(1.032); }
+
+@media (prefers-reduced-motion: reduce) {
+  .card:hover .media img,
+  .wire-item:hover .media img { transform: none; }
+  .media-play::after { transition: none; }
+}
+
+/* A hairline of gold on the left of the lead story: the eye's entry point to
+   the page, and the one place the accent is allowed to be structural rather
+   than decorative. */
+.lead-story {
+  position: relative;
+  padding-left: 1.1rem;
+}
+.lead-story::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 1.75rem;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--gold), transparent 85%);
+}
+
+@media (width <= 640px) {
+  .lead-story { padding-left: 0.85rem; }
+  .media-video { margin: 1rem 0 1.5rem; }
+  .media-play::after { width: 2.4rem; height: 2.4rem; }
+}
+
+/* ---------------------------------------------------------------------------
+   Desks
+   ---------------------------------------------------------------------------
+   Choosing a desk is a different kind of decision from choosing a section: it
+   changes what the whole site is about rather than which slice of it you are
+   reading. So the switcher is set apart from the section nav — heavier, boxed,
+   and first in the reading order — instead of being one more link in a row of
+   seven where it would disappear. */
+
+.desks {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--ink-700);
+  flex: none;
+}
+
+.desk-link {
+  display: inline-block;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.desk-link:hover { color: var(--paper); background: var(--ink-600); }
+
+/* `.on` is set by leptos_router on the active route. Gold fill rather than
+   gold text: at this size a colour change alone is too quiet to read as
+   "you are here". */
+.desk-link.on {
+  color: var(--ink-900);
+  background: var(--gold);
+}
+
+/* The beat a story belongs to, shown on cards when the reader is on a blended
+   surface and could otherwise not tell which desk something came from. On a
+   desk page it is redundant and hidden. */
+.beat-tag {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.beat-tag.beat-ai     { color: var(--gold); border-color: var(--gold-line); }
+.beat-tag.beat-crypto { color: var(--paper-dim); }
+
+@media (width <= 760px) {
+  .desks { order: 1; margin-left: auto; }
+  .desk-link { padding: 0.24rem 0.6rem; font-size: 0.72rem; }
+}
+
+/* What a card is, when it is not an article. Deliberately quiet — these sit
+   next to the category kicker and must not out-shout the headline. */
+.kind-tag {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.4rem;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  opacity: 0.9;
+}
+/* Preprints get the cool end of the palette: this is the one tag that is a
+   caution rather than an invitation. */
+.kind-research { color: #7aa2f7; }
+.kind-forum    { color: #9d7cd8; }
+.kind-video    { color: var(--gold); }
+
+/* The Wire as a full-width list rather than a rail. Used on desk pages below
+   the lead, and on /wire itself. Rows carry their own grid; this only owns the
+   rhythm between them and the rule that closes the section. */
+.wire-full {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 0.25rem;
+}
+.wire-full .wire-item:last-child { border-bottom: none; }
+
+/* A desk page leads with one story at full width — wider than the lead in the
+   split layout, because there is no rail competing for the eye.
+   
+   The height is capped rather than left to the aspect ratio. At full column
+   width a 21:9 hero is over half a laptop viewport, which pushes every other
+   story below the fold and makes a news front page feel like a landing page.
+   `max-height` plus `object-fit: cover` keeps the crop cinematic while leaving
+   room for the stories underneath it to be seen. */
+.page > .lead-story { margin-bottom: 2rem; }
+
+/* The cap goes on the figure, not the image. Capping only the image leaves the
+   figure at its 16:9 aspect-ratio, so its background shows as a bare band under
+   the photo with the credit stranded on it — which is exactly how it rendered
+   on mobile. Sizing the figure and letting the image fill it keeps the two in
+   step. */
+/* Size the image, let the figure follow it.
+   
+   Two earlier attempts failed for opposite reasons. `aspect-ratio` plus
+   `max-height` shrinks the box in both directions, so the hero came out at
+   ~60% width with dead space beside it. Fixing the *figure's* height instead
+   made the image and its credit overflow that height, leaving a bare band
+   under the photo. Constraining the image alone gives full width, a clean
+   crop, and a figure that is exactly as tall as its contents. */
+.page > .lead-story .media-lead {
+  aspect-ratio: auto;
+  height: auto;
+}
+.page > .lead-story .media-lead img {
+  width: 100%;
+  height: clamp(220px, 38vh, 460px);
+  aspect-ratio: auto;
+  object-fit: cover;
+}
+
+@media (width <= 760px) {
+  .page > .lead-story .media-lead img {
+    height: clamp(180px, 28vh, 280px);
+  }
+}
+
+/* The credit is one line. "Image: Yahoo Finance" wrapping to two on a phone
+   reads as a broken block rather than a caption. */
+.media figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: baseline;
+}
+
+
+/* The masthead carries a brand, four desks, six sections and a theme toggle.
+   Left to itself the section nav was the thing that gave way, scrolling "The
+   Flock" and "Standards" out of view on a 1600px desktop — the widest screen
+   most readers have. Tightening the section row and letting it shrink last
+   keeps everything visible down to about 1100px, below which it scrolls by
+   design. */
+.masthead .shell {
+  gap: 1rem;
+}
+.nav {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+@media (width >= 761px) {
+  .nav { gap: 0.95rem; font-size: 0.85rem; }
+  .desks { flex: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Share
+   --------------------------------------------------------------------------- */
+
+.sharebar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 2rem 0 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.sharebar-label {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 0.25rem;
+}
+
+.share-btn {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  font-weight: 550;
+  line-height: 1;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--ink-700);
+  color: var(--paper-dim);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.share-btn:hover {
+  color: var(--ink-900);
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+/* `details` is doing the work a popover would, without script: the QR only
+   matters to the minority who share from a desktop, and it should cost the
+   rest nothing. */
+.share-qr { position: relative; display: inline-block; }
+.share-qr > summary { list-style: none; }
+.share-qr > summary::-webkit-details-marker { display: none; }
+
+.share-qr-pop {
+  position: absolute;
+  z-index: 20;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  width: 214px;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--ink-800);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.share-qr-pop img {
+  display: block;
+  width: 180px;
+  height: 180px;
+  border-radius: 4px;
+  background: #fff;
+}
+.share-qr-pop p {
+  margin: 0.6rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+@media (width <= 640px) {
+  /* Real touch targets. These were 33px tall — measured, not guessed — against
+     a 44px minimum, which is small enough to mis-tap on the control whose whole
+     job is being tapped once. */
+  .share-btn {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 1rem;
+    font-size: 0.85rem;
+  }
+
+  /* Anchoring the popover to its `details` parent put it 114px off the left
+     edge, because that parent sits near the start of the row and the popover is
+     wider than the space to its left. Pinning it to the viewport instead means
+     its position cannot depend on where in the row the button happens to fall. */
+  .share-qr-pop {
+    position: fixed;
+    left: 50%;
+    right: auto;
+    bottom: 1rem;
+    transform: translateX(-50%);
+    width: min(240px, calc(100vw - 2rem));
+  }
+  .share-qr-pop img { margin: 0 auto; }
+}
+
+/* ===========================================================================
+   Pull-quotes and the analysis block
+   ---------------------------------------------------------------------------
+   These two blocks sit next to each other under the article and must not look
+   alike. A pull-quote is someone else's words, verbatim and attributed; the
+   Skein is ours, and inferred. The visual language separates them on purpose:
+   quotes borrow the serif display face and a gold rule, while the analysis gets a
+   panel, a standing label and a stated confidence — it reads as an aside from
+   the newsroom rather than as more of the story.
+   ========================================================================= */
+
+.quotes { margin: 2rem 0 0; }
+
+.pullquote {
+  margin: 1.75rem 0;
+  padding: 0 0 0 1.25rem;
+  border-left: 3px solid var(--gold);
+
+  blockquote {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: clamp(1.15rem, 2.4vw, 1.4rem);
+    line-height: 1.45;
+    color: var(--paper);
+    /* Typographic quotes as generated content: the stored excerpt is verbatim
+       source text, so adding characters to it would make the excerpt and the
+       thing we display differ. */
+    &::before { content: "\201C"; }
+    &::after  { content: "\201D"; }
+  }
+
+  figcaption {
+    margin-top: 0.6rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+
+    .pq-who {
+      color: var(--paper-dim);
+      font-weight: 600;
+      &::after { content: ","; color: var(--faint); }
+    }
+    a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+    a:hover { color: var(--gold); }
+  }
+}
+
+.analysis {
+  margin: 2.5rem 0 0;
+  padding: 1.4rem 1.5rem 1.25rem;
+  background: var(--ink-700);
+  border: 1px solid var(--line);
+  /* The gold edge is the same signal the masthead uses for "this is VictoriaPark
+     speaking", which is exactly what this block is. */
+  border-left: 3px solid var(--gold);
+  border-radius: 6px;
+}
+
+.analysis-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+
+  h2 {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 1.15rem;
+    letter-spacing: 0.01em;
+  }
+  .analysis-mark { display: inline-flex; color: var(--gold); }
+}
+
+.analysis-tag {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: var(--gold-dim);
+  border: 1px solid var(--gold-line);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  white-space: nowrap;
+}
+
+.analysis-sig {
+  margin: 0 0 1.1rem;
+  font-size: 1rem;
+  line-height: 1.66;
+  color: var(--paper);
+}
+
+.analysis-dir {
+  padding: 0.9rem 1rem;
+  background: var(--ink-800);
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+
+  p { margin: 0; font-size: 0.95rem; line-height: 1.6; color: var(--paper-dim); }
+}
+
+.analysis-dir-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.analysis-dir-label {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Confidence is a colour and a number together. The number alone gets skimmed
+   past; the colour alone is not precise enough to hold us to anything. */
+.analysis-stance {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.18rem 0.5rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+
+  .analysis-pct { opacity: 0.75; font-weight: 500; }
+
+  &.s-likely      { color: var(--v-corroborated); background: rgba(63, 191, 127, 0.13); }
+  &.s-leaning     { color: var(--v-single);       background: rgba(232, 163, 23, 0.13); }
+  &.s-uncertain   { color: var(--v-disputed);     background: rgba(240, 136, 62, 0.13); }
+  &.s-speculative { color: var(--muted);          background: rgba(131, 140, 151, 0.13); }
+}
+
+.analysis-horizon {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--faint);
+}
+
+.analysis-watch {
+  margin-top: 1rem;
+
+  .analysis-watch-label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  ul { margin: 0; padding: 0; list-style: none; }
+
+  li {
+    position: relative;
+    padding-left: 1.1rem;
+    margin-bottom: 0.42rem;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--paper-dim);
+
+    &::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.62em;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--gold);
+      opacity: 0.65;
+    }
+  }
+}
+
+.analysis-foot {
+  margin: 1.1rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line-soft);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--faint);
+
+  .analysis-model { font-family: var(--mono); color: var(--muted); }
+}
+
+@media (width <= 640px) {
+  .analysis { padding: 1.15rem 1.1rem 1rem; }
+  /* The tag wraps under the heading on narrow screens rather than squeezing
+     the title to two characters. */
+  .analysis-head { flex-wrap: wrap; }
+  .analysis-tag { margin-left: 0; }
+  .analysis-horizon { margin-left: 0; width: 100%; }
+  .pullquote { padding-left: 1rem; }
+}
+
+/* The card marker for a story that carries an analysis. Sized and coloured to
+   sit inside the meta row as one more fact about the story, not as a call to
+   action — it competes with the headline if it shouts. */
+.has-analysis {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  opacity: 0.9;
+}
+
+/* ---------------------------------------------------------------------------
+   Gaggles — special topics
+   ---------------------------------------------------------------------------
+   A strip rather than a card grid. These appear rarely (a topic needs five
+   independent outlets inside two days), so they should read as a banner the
+   reader notices, not as another row of the same furniture. */
+
+/* The rules span the viewport; the contents stay in the page gutter. */
+.gaggle-band {
+  margin: 0 0 1.5rem;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.gaggle-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.gaggle-strip-label {
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 0.2rem;
+}
+
+.gaggle-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--gold-line);
+  background: var(--gold-dim);
+  border-radius: 999px;
+  text-decoration: none;
+
+  .gaggle-chip-title { color: var(--paper); font-weight: 600; font-size: 0.9rem; }
+  .gaggle-chip-meta { font-family: var(--mono); font-size: 0.68rem; color: var(--gold); }
+  &:hover { border-color: var(--gold); }
+}
+
+.gaggle-head {
+  margin-bottom: 1.75rem;
+
+  h1 { margin: 0.5rem 0 0.6rem; }
+}
+
+.gaggle-tag {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  background: var(--gold-dim);
+  border: 1px solid var(--gold-line);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+}
+
+/* The page states its own justification. Seven newsrooms converging is the
+   whole argument for it existing, so it is printed rather than implied. */
+.gaggle-why {
+  margin: 0.9rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  strong { color: var(--paper-dim); }
+  .gaggle-model { font-family: var(--mono); color: var(--faint); }
+}
+
+// The spending mandate on an agent tile.
+//
+// A cost figure is the newsroom reporting on itself. A mandate is a ceiling
+// committed to before the spending happened, so the bar can be wrong in a way
+// a reader can see — which is the point of putting it on the page at all.
+.mandate {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--rule);
+
+  .mandate-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .mandate-figure {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-2);
+  }
+
+  .mandate-bar {
+    margin-top: 0.35rem;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--rule);
+    overflow: hidden;
+  }
+
+  .mandate-fill {
+    display: block;
+    height: 100%;
+    background: var(--gold);
+    // Nothing animates on load: the bar is a fact, not a flourish.
+    transition: width 0.2s ease;
+  }
+
+  // Near the ceiling. Not an error — a mandate reaching its limit is the
+  // mechanism working — but worth seeing at a glance.
+  .mandate-tight {
+    background: var(--signal-red, #d9534f);
+  }
+}

@@ -1,0 +1,48 @@
+[Unit]
+Description=VictoriaPark web server (site + /v1 REST + /mcp)
+Documentation=https://github.com/finalverse/victoriapark
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=bg
+Group=bg
+WorkingDirectory=/opt/victoriapark/current
+EnvironmentFile=/opt/victoriapark/shared/victoriapark.env
+ExecStart=/opt/victoriapark/current/bin/bg-web
+Restart=always
+RestartSec=5s
+
+# The newsroom parses untrusted content from the open internet continuously,
+# so the blast radius of a parser bug is worth constraining up front.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# The web process renders and caches OG cards on demand, and mirrors a
+# publisher photograph the first time a story is shared, so it needs the same
+# asset cache the worker writes. Everything else stays read-only.
+ReadWritePaths=/var/cache/victoriapark
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=victoriapark-web
+
+[Install]
+WantedBy=multi-user.target

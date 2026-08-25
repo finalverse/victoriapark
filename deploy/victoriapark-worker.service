@@ -1,0 +1,53 @@
+[Unit]
+Description=VictoriaPark autonomous AI newsroom worker
+Documentation=https://github.com/finalverse/victoriapark
+After=network-online.target postgresql.service victoriapark-web.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=bg
+Group=bg
+WorkingDirectory=/opt/victoriapark/current
+EnvironmentFile=/opt/victoriapark/shared/victoriapark.env
+# 300s between passes: fast enough that breaking news lands within minutes,
+# slow enough to stay polite to nine upstream feeds. Conditional GET means most
+# passes cost one 304 per source.
+ExecStart=/opt/victoriapark/current/bin/bg worker --interval 300
+Restart=always
+RestartSec=30s
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# The share-asset cache: mirrored publisher photographs, written at publish
+# time and by the Steward's backfill. ProtectSystem=strict makes the whole
+# filesystem read-only apart from what is named here, so leaving this empty
+# did not merely restrict the worker — it silently broke every image mirror.
+# The symptom was four days of share cards drawn by us for stories that had a
+# photograph, with `bg` able to write the directory from a shell and the
+# service unable to, which is a confusing pair of facts until you remember the
+# sandbox. See mirror::store, which now logs the EROFS instead of swallowing it.
+ReadWritePaths=/var/cache/victoriapark
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=victoriapark-worker
+
+[Install]
+WantedBy=multi-user.target
