@@ -273,6 +273,10 @@ impl LlmProvider for StubProvider {
         "stub"
     }
 
+    fn is_local(&self) -> bool {
+        true
+    }
+
     fn spec(&self, _tier: ModelTier) -> ModelSpec {
         pricing::STUB
     }

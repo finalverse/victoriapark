@@ -429,38 +429,49 @@ impl Llm {
 
     /// Run a request through the chain.
     pub async fn complete(&self, req: &Request) -> Result<Completion> {
+        let chain = self.chain_for(req.tier);
+
         // If the provider has already refused this tier and said how long for,
-        // do not spend a request finding out again.
+        // do not spend another hosted request finding out again. A local or
+        // deterministic fallback has no provider allowance, however, and must
+        // keep the newsroom moving while the hosted tier cools down.
         //
         // Measured on production: 83 refusals in six hours, 69 of them "retry
         // in 300s", and every agent in the pass discovering it separately —
         // 28 of 28 Gander runs failed, 29 of 32 Gosling. Failing here costs
         // nothing and leaves the pass free to do the deterministic work
         // (polling, mirroring, the Steward) that needs no provider at all.
-        if let Some(left) = self.pacer.cooling_for(req.tier) {
+        let cooling = self.pacer.cooling_for(req.tier);
+        if let Some(left) = cooling {
             debug!(
                 task = %req.task, tier = ?req.tier, wait_s = left.as_secs(),
-                "tier is cooling after a refusal; not calling"
+                "tier is cooling after a refusal; skipping hosted providers"
             );
-            return Err(LlmError::RateLimited {
-                provider: "pacer",
-                retry_after: left,
-            });
+            if !chain.iter().any(|p| p.is_local()) {
+                return Err(LlmError::RateLimited {
+                    provider: "pacer",
+                    retry_after: left,
+                });
+            }
         }
 
         // Spend the minute deliberately. The retry loop below stays as a
         // backstop for when this estimate is wrong or something else is using
         // the same key, but it should now be the exception rather than the
         // mechanism by which we discover the limit.
-        let reservation = if self.pacer.enabled() && !self.tier_is_local(req.tier) {
-            let cost = pacer::estimate_tokens(&req.system, &req.user, req.max_tokens);
-            Some(self.pacer.acquire(req.tier, cost, &req.task).await)
-        } else {
-            None
-        };
+        let reservation =
+            if cooling.is_none() && self.pacer.enabled() && !self.tier_is_local(req.tier) {
+                let cost = pacer::estimate_tokens(&req.system, &req.user, req.max_tokens);
+                Some(self.pacer.acquire(req.tier, cost, &req.task).await)
+            } else {
+                None
+            };
 
         let mut last: Option<LlmError> = None;
-        for p in self.chain_for(req.tier) {
+        for p in chain {
+            if cooling.is_some() && !p.is_local() {
+                continue;
+            }
             // Rate limits are waited out on the same provider rather than
             // failed over. A free tier's per-minute token budget is a normal
             // operating condition, not an outage, and the response says exactly
@@ -738,6 +749,7 @@ mod tier_routing_tests {
 #[cfg(test)]
 mod local_pacing_tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct Local;
     #[async_trait]
@@ -759,12 +771,29 @@ mod local_pacing_tests {
         }
     }
 
+    struct Hosted;
+    #[async_trait]
+    impl LlmProvider for Hosted {
+        fn name(&self) -> &'static str {
+            "hosted"
+        }
+        fn spec(&self, tier: ModelTier) -> ModelSpec {
+            stub::StubProvider.spec(tier)
+        }
+        async fn complete(&self, _r: &Request) -> Result<Completion> {
+            unreachable!("not called in this test")
+        }
+        async fn health(&self) -> Result<()> {
+            Ok(())
+        }
+    }
+
     #[test]
     fn a_locally_served_tier_is_not_paced() {
         // The GPU has no allowance to protect. Pacing it to a hosted
         // provider's per-minute budget throttled 270 headlines a minute down
         // to about 28, on behalf of an API that was not being called.
-        let llm = Llm::new(vec![Arc::new(stub::StubProvider) as Arc<dyn LlmProvider>])
+        let llm = Llm::new(vec![Arc::new(Hosted) as Arc<dyn LlmProvider>])
             .with_tier_chain(ModelTier::Fast, vec![Arc::new(Local)]);
         assert!(llm.tier_is_local(ModelTier::Fast));
         assert!(
@@ -775,13 +804,49 @@ mod local_pacing_tests {
 
     #[test]
     fn a_tier_that_falls_back_to_a_hosted_provider_is_still_paced() {
-        // All of them local, not just the first: the fallback spends a real
-        // allowance and the budget has to be respected when it is reached.
+        // All of them local, not just the first: a hosted fallback spends a
+        // real allowance and the budget has to be respected when it is reached.
         let llm = Llm::new(vec![Arc::new(stub::StubProvider) as Arc<dyn LlmProvider>])
-            .with_tier_chain(
-                ModelTier::Fast,
-                vec![Arc::new(Local), Arc::new(stub::StubProvider)],
-            );
+            .with_tier_chain(ModelTier::Fast, vec![Arc::new(Local), Arc::new(Hosted)]);
         assert!(!llm.tier_is_local(ModelTier::Fast));
+    }
+
+    #[tokio::test]
+    async fn a_cooling_hosted_provider_does_not_block_the_local_fallback() {
+        struct Limited(Arc<AtomicUsize>);
+        #[async_trait]
+        impl LlmProvider for Limited {
+            fn name(&self) -> &'static str {
+                "limited"
+            }
+            fn spec(&self, tier: ModelTier) -> ModelSpec {
+                stub::StubProvider.spec(tier)
+            }
+            async fn complete(&self, _r: &Request) -> Result<Completion> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Err(LlmError::RateLimited {
+                    provider: "limited",
+                    retry_after: std::time::Duration::from_secs(3_600),
+                })
+            }
+            async fn health(&self) -> Result<()> {
+                Ok(())
+            }
+        }
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let llm = Llm::new(vec![
+            Arc::new(Limited(calls.clone())),
+            Arc::new(stub::StubProvider),
+        ]);
+        let req = Request::new("t", ModelTier::Fast, "sys", "user");
+
+        assert_eq!(llm.complete(&req).await.unwrap().provider, "stub");
+        assert_eq!(llm.complete(&req).await.unwrap().provider, "stub");
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "the second call must skip the known-cooling hosted provider"
+        );
     }
 }
