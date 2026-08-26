@@ -19,7 +19,7 @@
 //! auto-generated topic hubs is the thing this must not become.
 
 use crate::{stage, Ctx, FlockError, Result, StageOutput};
-use bg_core::domain::{AgentRole, ModelTier};
+use bg_core::domain::{AgentRole, EditorialLanguage, ModelTier};
 use bg_llm::{schema as sch, Request};
 use serde::Deserialize;
 use tracing::info;
@@ -112,24 +112,44 @@ fn tracked_schema() -> serde_json::Value {
 /// in the budgeted pass.
 pub async fn refresh(ctx: &Ctx) -> Result<usize> {
     let tracked = bg_db::gaggles::refresh_tracked(&ctx.db).await?;
-    let headlines = bg_db::gaggles::recent_headlines(&ctx.db, WINDOW_HOURS, 4_000).await?;
+    let mut refreshed = tracked;
+    for language in editions() {
+        refreshed += refresh_language(ctx, language).await?;
+    }
+    Ok(refreshed)
+}
+
+const fn editions() -> [EditorialLanguage; 5] {
+    [
+        EditorialLanguage::Zh,
+        EditorialLanguage::ZhHant,
+        EditorialLanguage::En,
+        EditorialLanguage::Ja,
+        EditorialLanguage::Ko,
+    ]
+}
+
+async fn refresh_language(ctx: &Ctx, language: EditorialLanguage) -> Result<usize> {
+    let headlines =
+        bg_db::gaggles::recent_headlines(&ctx.db, language, WINDOW_HOURS, 4_000).await?;
     if headlines.is_empty() {
-        return Ok(tracked);
+        return Ok(0);
     }
     let baseline = bg_db::gaggles::baseline_headlines(
         &ctx.db,
+        language,
         WINDOW_HOURS,
         (BASELINE_DAYS as i64) * 24,
         20_000,
     )
     .await?;
 
-    let mut refreshed = tracked;
+    let mut refreshed = 0usize;
     for heat in bg_core::trends::rank_spikes(&headlines, &baseline, BASELINE_DAYS, MIN_SOURCES) {
-        if !bg_db::gaggles::exists(&ctx.db, &heat.topic).await? {
+        if !bg_db::gaggles::exists(&ctx.db, &heat.topic, language).await? {
             continue;
         }
-        let stories = bg_db::gaggles::stories_for_topic(&ctx.db, &heat.topic, 60).await?;
+        let stories = bg_db::gaggles::stories_for_topic(&ctx.db, &heat.topic, language, 60).await?;
         let id = bg_db::gaggles::upsert(
             &ctx.db,
             &bg_db::gaggles::NewGaggle {
@@ -141,6 +161,7 @@ pub async fn refresh(ctx: &Ctx) -> Result<usize> {
                 source_count: heat.sources as i32,
                 story_count: stories.len() as i32,
                 model: None,
+                editorial_language: language,
             },
             None,
         )
@@ -156,9 +177,18 @@ pub async fn refresh(ctx: &Ctx) -> Result<usize> {
 /// Returns how many were opened or refreshed.
 pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
     let briefed = refresh_tracked_briefs(ctx, max_new.min(1)).await?;
-    let headlines = bg_db::gaggles::recent_headlines(&ctx.db, WINDOW_HOURS, 4_000).await?;
+    let mut total = briefed;
+    for language in editions() {
+        total += run_language(ctx, max_new, language).await?;
+    }
+    Ok(total)
+}
+
+async fn run_language(ctx: &Ctx, max_new: usize, language: EditorialLanguage) -> Result<usize> {
+    let headlines =
+        bg_db::gaggles::recent_headlines(&ctx.db, language, WINDOW_HOURS, 4_000).await?;
     if headlines.is_empty() {
-        return Ok(briefed);
+        return Ok(0);
     }
 
     // Measured against the subject's own history, not raw volume. The first
@@ -167,6 +197,7 @@ pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
     // normal.
     let baseline = bg_db::gaggles::baseline_headlines(
         &ctx.db,
+        language,
         WINDOW_HOURS,
         (BASELINE_DAYS as i64) * 24,
         20_000,
@@ -178,7 +209,7 @@ pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
             headlines = headlines.len(),
             "nothing converged past the threshold"
         );
-        return Ok(briefed);
+        return Ok(0);
     }
 
     // Topics the Gander has already refused, still inside their backoff. One
@@ -211,8 +242,8 @@ pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
         }
         // A gaggle that already exists is refreshed without spending a call on
         // re-writing prose that has not stopped being true.
-        let known = bg_db::gaggles::exists(&ctx.db, &heat.topic).await?;
-        let stories = bg_db::gaggles::stories_for_topic(&ctx.db, &heat.topic, 60).await?;
+        let known = bg_db::gaggles::exists(&ctx.db, &heat.topic, language).await?;
+        let stories = bg_db::gaggles::stories_for_topic(&ctx.db, &heat.topic, language, 60).await?;
         if stories.is_empty() {
             // Hot across the wires but nothing published yet. It will still be
             // hot next pass, by which point the pipeline may have caught up.
@@ -232,6 +263,7 @@ pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
                     source_count: heat.sources as i32,
                     story_count: stories.len() as i32,
                     model: None,
+                    editorial_language: language,
                 },
                 None,
             )
@@ -255,6 +287,10 @@ pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
                 }
             }
 
+            let prompt = format!(
+                "OUTPUT_LANGUAGE={}\n{prompt}",
+                crate::output_language(language)
+            );
             let req = Request::new("gander.gaggle", ModelTier::Fast, system, prompt)
                 .with_schema(schema())
                 .with_max_tokens(600);
@@ -300,6 +336,7 @@ pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
                     source_count: heat.sources as i32,
                     story_count: stories.len() as i32,
                     model: Some(completion.model.clone()),
+                    editorial_language: language,
                 },
                 Some(run),
             )
@@ -313,7 +350,7 @@ pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
         .await?;
         opened += n;
     }
-    Ok(opened + briefed)
+    Ok(opened)
 }
 
 /// Re-synthesise long-running topic briefs from VictoriaPark's published work.

@@ -11,6 +11,7 @@
 pub mod canonical;
 pub mod crawl;
 pub mod feeds;
+pub mod hotlists;
 pub mod http;
 pub mod market;
 pub mod mirror;

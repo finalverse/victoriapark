@@ -86,28 +86,64 @@ pub fn App() -> impl IntoView {
                 <Routes fallback=pages::NotFound>
                     <Route path=path!("/") view=pages::Home />
                     <Route path=path!("/en") view=pages::HomeEn />
+                    <Route path=path!("/zh-hant") view=pages::HomeZhHant />
+                    <Route path=path!("/ja") view=pages::HomeJa />
+                    <Route path=path!("/ko") view=pages::HomeKo />
                     <Route path=path!("/ai") view=pages::DeskAi />
                     <Route path=path!("/en/ai") view=pages::DeskAiEn />
+                    <Route path=path!("/zh-hant/ai") view=pages::DeskAiZhHant />
+                    <Route path=path!("/ja/ai") view=pages::DeskAiJa />
+                    <Route path=path!("/ko/ai") view=pages::DeskAiKo />
                     <Route path=path!("/crypto") view=pages::DeskCrypto />
                     <Route path=path!("/en/crypto") view=pages::DeskCryptoEn />
+                    <Route path=path!("/zh-hant/crypto") view=pages::DeskCryptoZhHant />
+                    <Route path=path!("/ja/crypto") view=pages::DeskCryptoJa />
+                    <Route path=path!("/ko/crypto") view=pages::DeskCryptoKo />
                     <Route path=path!("/markets") view=pages::DeskMarkets />
                     <Route path=path!("/en/markets") view=pages::DeskMarketsEn />
+                    <Route path=path!("/zh-hant/markets") view=pages::DeskMarketsZhHant />
+                    <Route path=path!("/ja/markets") view=pages::DeskMarketsJa />
+                    <Route path=path!("/ko/markets") view=pages::DeskMarketsKo />
                     <Route path=path!("/tech") view=pages::DeskTech />
                     <Route path=path!("/en/tech") view=pages::DeskTechEn />
+                    <Route path=path!("/zh-hant/tech") view=pages::DeskTechZhHant />
+                    <Route path=path!("/ja/tech") view=pages::DeskTechJa />
+                    <Route path=path!("/ko/tech") view=pages::DeskTechKo />
                     <Route path=path!("/world") view=pages::DeskWorld />
                     <Route path=path!("/en/world") view=pages::DeskWorldEn />
+                    <Route path=path!("/zh-hant/world") view=pages::DeskWorldZhHant />
+                    <Route path=path!("/ja/world") view=pages::DeskWorldJa />
+                    <Route path=path!("/ko/world") view=pages::DeskWorldKo />
                     <Route path=path!("/science") view=pages::DeskScience />
                     <Route path=path!("/en/science") view=pages::DeskScienceEn />
+                    <Route path=path!("/zh-hant/science") view=pages::DeskScienceZhHant />
+                    <Route path=path!("/ja/science") view=pages::DeskScienceJa />
+                    <Route path=path!("/ko/science") view=pages::DeskScienceKo />
                     <Route path=path!("/culture") view=pages::DeskCulture />
                     <Route path=path!("/en/culture") view=pages::DeskCultureEn />
+                    <Route path=path!("/zh-hant/culture") view=pages::DeskCultureZhHant />
+                    <Route path=path!("/ja/culture") view=pages::DeskCultureJa />
+                    <Route path=path!("/ko/culture") view=pages::DeskCultureKo />
                     <Route path=path!("/wire") view=pages::Wire />
                     <Route path=path!("/en/wire") view=pages::WireEn />
+                    <Route path=path!("/zh-hant/wire") view=pages::WireZhHant />
+                    <Route path=path!("/ja/wire") view=pages::WireJa />
+                    <Route path=path!("/ko/wire") view=pages::WireKo />
                     <Route path=path!("/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />
                     <Route path=path!("/en/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />
+                    <Route path=path!("/zh-hant/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />
+                    <Route path=path!("/ja/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />
+                    <Route path=path!("/ko/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />
                     <Route path=path!("/desk") view=pages::Desk />
                     <Route path=path!("/en/desk") view=pages::DeskEn />
+                    <Route path=path!("/zh-hant/desk") view=pages::DeskZhHant />
+                    <Route path=path!("/ja/desk") view=pages::DeskJa />
+                    <Route path=path!("/ko/desk") view=pages::DeskKo />
                     <Route path=path!("/section/:category") view=pages::Section />
                     <Route path=path!("/en/section/:category") view=pages::SectionEn />
+                    <Route path=path!("/zh-hant/section/:category") view=pages::SectionZhHant />
+                    <Route path=path!("/ja/section/:category") view=pages::SectionJa />
+                    <Route path=path!("/ko/section/:category") view=pages::SectionKo />
                     // The one route that must not stream out of order.
                     //
                     // A story's `og:image`, `og:title` and JSON-LD all depend on
@@ -120,13 +156,40 @@ pub fn App() -> impl IntoView {
                     // what the page contained. `Async` waits for the data and
                     // sends one complete document.
                     <Route path=path!("/story/:slug") view=pages::Story ssr=SsrMode::Async />
+                    <Route path=path!("/en/story/:slug") view=pages::Story ssr=SsrMode::Async />
+                    <Route path=path!("/zh-hant/story/:slug") view=pages::Story ssr=SsrMode::Async />
+                    <Route path=path!("/ja/story/:slug") view=pages::Story ssr=SsrMode::Async />
+                    <Route path=path!("/ko/story/:slug") view=pages::Story ssr=SsrMode::Async />
                     <Route path=path!("/flock") view=pages::Flock />
+                    <Route path=path!("/en/flock") view=pages::Flock />
+                    <Route path=path!("/zh-hant/flock") view=pages::Flock />
+                    <Route path=path!("/ja/flock") view=pages::Flock />
+                    <Route path=path!("/ko/flock") view=pages::Flock />
                     <Route path=path!("/prices") view=pages::Prices />
+                    <Route path=path!("/en/prices") view=pages::Prices />
+                    <Route path=path!("/zh-hant/prices") view=pages::Prices />
+                    <Route path=path!("/ja/prices") view=pages::Prices />
+                    <Route path=path!("/ko/prices") view=pages::Prices />
                     <Route path=path!("/asset/:ticker") view=pages::Asset />
+                    <Route path=path!("/en/asset/:ticker") view=pages::Asset />
+                    <Route path=path!("/zh-hant/asset/:ticker") view=pages::Asset />
+                    <Route path=path!("/ja/asset/:ticker") view=pages::Asset />
+                    <Route path=path!("/ko/asset/:ticker") view=pages::Asset />
                     <Route path=path!("/flyway") view=pages::Flyway />
                     <Route path=path!("/en/flyway") view=pages::FlywayEn />
+                    <Route path=path!("/zh-hant/flyway") view=pages::FlywayZhHant />
+                    <Route path=path!("/ja/flyway") view=pages::FlywayJa />
+                    <Route path=path!("/ko/flyway") view=pages::FlywayKo />
                     <Route path=path!("/standards") view=pages::Standards />
+                    <Route path=path!("/en/standards") view=pages::Standards />
+                    <Route path=path!("/zh-hant/standards") view=pages::Standards />
+                    <Route path=path!("/ja/standards") view=pages::Standards />
+                    <Route path=path!("/ko/standards") view=pages::Standards />
                     <Route path=path!("/developers") view=pages::Developers />
+                    <Route path=path!("/en/developers") view=pages::Developers />
+                    <Route path=path!("/zh-hant/developers") view=pages::Developers />
+                    <Route path=path!("/ja/developers") view=pages::Developers />
+                    <Route path=path!("/ko/developers") view=pages::Developers />
                 </Routes>
             </main>
             <ui::Footer />

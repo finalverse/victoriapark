@@ -527,7 +527,10 @@ pub const HOUSE_STYLE: &str = include_str!("../../../prompts/master-system.md");
 pub const fn output_language(lang: bg_core::domain::EditorialLanguage) -> &'static str {
     match lang {
         bg_core::domain::EditorialLanguage::Zh => "zh",
+        bg_core::domain::EditorialLanguage::ZhHant => "zh-Hant",
         bg_core::domain::EditorialLanguage::En => "en",
+        bg_core::domain::EditorialLanguage::Ja => "ja",
+        bg_core::domain::EditorialLanguage::Ko => "ko",
     }
 }
 
@@ -607,7 +610,8 @@ mod tests {
 
     #[test]
     fn house_style_states_the_non_negotiables() {
-        for must in ["事实高于立场", "传统价值", "25", "中英文"] {
+        for must in ["事实高于立场", "传统价值", "25", "繁体中文", "日文", "韩文"]
+        {
             assert!(HOUSE_STYLE.contains(must), "house style missing: {must}");
         }
     }

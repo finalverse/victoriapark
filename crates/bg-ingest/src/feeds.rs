@@ -59,6 +59,20 @@ fn is_aggregator(slug: &str) -> bool {
     slug.starts_with("gnews")
 }
 
+fn source_language(slug: &str, advertised: &str) -> String {
+    if slug.starts_with("hot-") || slug.starts_with("gnews-zh-") || slug.starts_with("voa-zh-") {
+        "zh".into()
+    } else if slug.starts_with("rthk-") || slug.starts_with("cna-") {
+        "zh-hant".into()
+    } else if slug.starts_with("nhk-") || slug.starts_with("nippon-") {
+        "ja".into()
+    } else if slug.starts_with("yna-") || slug.starts_with("kbs-ko-") {
+        "ko".into()
+    } else {
+        bg_core::text::normalize_lang(advertised)
+    }
+}
+
 pub async fn poll_source(db: &Db, client: &reqwest::Client, src: &Source) -> PollReport {
     let mut rep = PollReport {
         source_slug: src.slug.clone(),
@@ -293,7 +307,7 @@ async fn poll_inner(
             // Normalised at the boundary. The corpus already holds `en-us`,
             // `en` and `en-US` for the same language, which makes any
             // per-language surface built on this quietly wrong.
-            lang: bg_core::text::normalize_lang(feed.language.as_deref().unwrap_or("en")),
+            lang: source_language(&src.slug, feed.language.as_deref().unwrap_or("en")),
             // YouTube's media:content is the player URL, not a picture.
             // Converting here means the column holds something an <img> can
             // actually load, rather than every reader having to know.
@@ -343,6 +357,42 @@ async fn crawl_inner(
         .map(|v| v != "false")
         .unwrap_or(true);
 
+    if crate::hotlists::is_hotlist(&src.slug) {
+        if respect && !crate::robots::allows(client, &agent, &src.url).await {
+            return Ok(());
+        }
+        let found = crate::hotlists::fetch(client, &src.slug, &src.url).await?;
+        rep.fetched = found.len();
+        for f in found {
+            let beat = src.beat.or_else(|| crate::relevance::classify(&f.title));
+            let item = NewItem {
+                source_id: src.id,
+                external_id: None,
+                canonical_url: f.url.clone(),
+                url_hash: url_hash(&f.url),
+                title: f.title.clone(),
+                dek: Some(f.dek.clone()),
+                authors: f.authors,
+                published_at: f.published_at,
+                summary_raw: Some(f.dek),
+                body_raw: None,
+                body_hash: None,
+                simhash: simhash64(&f.title),
+                lang: source_language(&src.slug, "zh"),
+                image_url: f.image_url,
+                video_id: None,
+                beat,
+            };
+            if bg_db::items::insert_new(db, &item).await?.is_some() {
+                rep.inserted += 1;
+            } else {
+                rep.duplicates += 1;
+            }
+        }
+        sources::record_success(db, src.id, None, None).await?;
+        return Ok(());
+    }
+
     let found = crate::crawl::index(client, &agent, &src.url, None, respect, 40).await?;
     rep.fetched = found.len();
 
@@ -364,7 +414,7 @@ async fn crawl_inner(
             body_raw: None,
             body_hash: None,
             simhash: simhash64(&f.title),
-            lang: bg_core::text::normalize_lang("en"),
+            lang: source_language(&src.slug, "en"),
             image_url: None,
             video_id: None,
             beat: crate::relevance::classify(&f.title),

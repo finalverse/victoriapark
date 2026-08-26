@@ -1,10 +1,11 @@
-# Multi-lingual VictoriaPark — a plan
+# Multi-lingual VictoriaPark
 
-Status: **plan, not yet built.** The groundwork (language tag normalisation) is
-in. Everything below is a decision record so the build is a series of small
-steps rather than one large guess.
+Status: **five independent editions are live in the architecture.** Simplified
+Chinese is primary (`/`); Traditional Chinese (`/zh-hant`), English (`/en`),
+Japanese (`/ja`) and Korean (`/ko`) have separate source pools, stories, trend
+baselines and special topics. They are editions, not a translation layer.
 
-## Where we start
+## Where we started
 
 The corpus is 100% English: 1,396 items, spelled `en-us`, `en` and `en-US` —
 three tags for one language, which is why `text::normalize_lang` now exists. A
@@ -43,39 +44,35 @@ here do not, or publish a truncated one. `bg-ingest::crawl` reads index pages
 directly, so the source roster is no longer limited to publishers who chose to
 emit XML.
 
-## Order of work
+## Implementation record
 
-**1. Make `lang` real** (small, no model cost)
-- Store the normalised tag — done at ingest
-- Backfill the existing corpus
-- Filter every surface by language; default to the reader's `Accept-Language`,
-  overridable and remembered
-- `hreflang` on every page, so search engines see one story in N languages
+**1. Make `lang` real — complete**
+- Tags are normalised at ingest, including `zh-Hant`, `zh-TW` and `zh-HK`.
+- Stories, category trends, entity trends, special topics and public routes are
+  filtered by edition.
+- The masthead preserves the current section while switching among five editions.
   rather than N duplicate pages
 
-**2. Language-aware relevance** (small)
+**2. Language-aware relevance — complete for pinned sources**
 `bg-ingest::relevance` routes by English keywords. A Chinese headline about
 比特币 matches nothing and is dropped before it reaches triage. The term tables
 need a per-language set; this is a data problem, not a model one.
 
-**3. Trend detection per language** (small)
-`bg-core::trends` extracts capitalised runs, which is an assumption about
-*English orthography*. Chinese and Japanese have no capitalisation and no spaces
-— the extractor returns nothing. Options, cheapest first:
-- CJK: n-gram frequency over character bigrams/trigrams, scored the same way
-  (independent-source convergence). No model, no dictionary.
-- A per-language stopword list, as English has.
-Convergence scoring itself is language-neutral and does not change.
+**3. Trend detection per language — complete**
+`bg-core::trends` retains English named-entity extraction and adds script-aware
+CJK/Hangul phrase extraction. Independent-source convergence and the two-week
+baseline remain the gate, so one platform cannot manufacture a special topic.
 
-**4. Sources** (data)
-Candidate first languages, chosen for depth of coverage in this beat:
-- **Chinese** — 链闻/ChainNews, 巴比特, 36氪 (tech). Check robots.txt first;
-  several are crawl-friendly, some are not.
-- **Japanese** — CoinPost, ITmedia.
-- **Korean** — 코인데스크코리아 (CoinDesk Korea is a separate newsroom).
-Each needs the robots check and a trust score before it goes in.
+**4. Sources — active roster**
+- Simplified Chinese: Google News Chinese sections, VOA Chinese and official
+  Weibo/Baidu/NetEase heat signals.
+- Traditional Chinese: RTHK and CNA edition feeds.
+- Japanese: NHK NEWS WEB and nippon.com.
+- Korean: Yonhap News.
+Every HTML source is checked against robots.txt. Heat lists are agenda signals,
+not factual authorities, and require corroboration before publication.
 
-**5. The Flock, per language** (model cost — the expensive step)
+**5. The Flock, per language — complete**
 Gosling, Herald and the Skein all write. Their prompts are English and their
 output must match the source language, not the prompt language.
 - The house style prompt needs a language directive per run
@@ -106,10 +103,10 @@ last because it depends on all of the above.
   fewer sources. Three Chinese outlets is three outlets; two is single-sourced
   in any language.
 
-## Open questions for the operator
+## Remaining work
 
-1. Which language first? Recommendation: **Chinese** — largest non-English
-   crypto readership and a genuine information gap.
-2. Paid inference tier? Step 5 is blocked without it.
-3. Do we want (a) as an interim — English stories with a translated summary —
-   or wait for (b)? I would wait; a mirror is not worth the tokens.
+- Add more primary and regional sources after robots and licensing review.
+- Add `hreflang` only where genuinely corresponding pages exist; independent
+  editions must not falsely claim that unrelated stories are translations.
+- Calibrate CJK/Hangul stop phrases against live traffic without lowering the
+  independent-source threshold.

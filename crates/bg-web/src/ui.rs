@@ -2,8 +2,50 @@
 
 use crate::model::*;
 use leptos::prelude::*;
+use leptos_meta::Html;
 use leptos_router::components::A;
 use leptos_router::hooks::use_location;
+
+fn edition_code(path: &str) -> &'static str {
+    if path == "/zh-hant" || path.starts_with("/zh-hant/") {
+        "zh-hant"
+    } else if path == "/ja" || path.starts_with("/ja/") {
+        "ja"
+    } else if path == "/ko" || path.starts_with("/ko/") {
+        "ko"
+    } else if path == "/en" || path.starts_with("/en/") {
+        "en"
+    } else {
+        "zh"
+    }
+}
+
+fn edition_prefix(language: &str) -> &'static str {
+    match language {
+        "en" => "/en",
+        "zh-hant" => "/zh-hant",
+        "ja" => "/ja",
+        "ko" => "/ko",
+        _ => "",
+    }
+}
+
+fn switch_edition(path: &str, target: &str) -> String {
+    let current = edition_code(path);
+    let rest = if current == "zh" {
+        path
+    } else {
+        path.strip_prefix(edition_prefix(current)).unwrap_or(path)
+    };
+    let rest = if rest.is_empty() { "/" } else { rest };
+    if target == "zh" {
+        rest.to_string()
+    } else if rest == "/" {
+        edition_prefix(target).to_string()
+    } else {
+        format!("{}{}", edition_prefix(target), rest)
+    }
+}
 
 /// VictoriaPark's gate-and-beacon mark.
 #[component]
@@ -24,38 +66,25 @@ pub fn GooseMark(#[prop(default = 26)] size: u32) -> impl IntoView {
 pub fn Masthead() -> impl IntoView {
     let location = use_location();
     let pathname = location.pathname;
-    let is_en = Memo::new(move |_| pathname.get().starts_with("/en"));
-    let edition_href = move |path: &'static str| {
-        move || {
-            if is_en.get() {
-                format!("/en{path}")
-            } else {
-                path.to_string()
-            }
-        }
-    };
-    let switch_href = move || {
-        let path = pathname.get();
-        if let Some(rest) = path.strip_prefix("/en") {
-            if rest.is_empty() {
-                "/".to_string()
-            } else {
-                rest.to_string()
-            }
-        } else if path == "/" {
-            "/en".to_string()
-        } else {
-            format!("/en{path}")
-        }
-    };
+    let language = Memo::new(move |_| edition_code(&pathname.get()));
+    let edition_href =
+        move |path: &'static str| move || format!("{}{path}", edition_prefix(language.get()));
+    let switch_href = move |target: &'static str| move || switch_edition(&pathname.get(), target);
     view! {
+        <Html attr:lang=move || match language.get() {
+            "zh" => "zh-CN",
+            "zh-hant" => "zh-Hant",
+            "ja" => "ja",
+            "ko" => "ko",
+            _ => "en",
+        } />
         <header class="masthead">
             <div class="shell">
-                <A href="/" attr:class="brand">
+                <A href=move || edition_prefix(language.get()).to_string() attr:class="brand">
                     <GooseMark size=34 />
                     <span>
-                        <span class="brand-bit">{move || if is_en.get() { "Victoria" } else { "维园" }}</span>
-                        <span class="brand-goose">{move || if is_en.get() { "Park" } else { "网" }}</span>
+                        <span class="brand-bit">{move || match language.get() { "zh" => "维园", "zh-hant" => "維園", _ => "Victoria" }}</span>
+                        <span class="brand-goose">{move || match language.get() { "zh" => "网", "zh-hant" => "網", _ => "Park" }}</span>
                     </span>
                 </A>
                 // The desk switcher sits ahead of the sections and is styled
@@ -63,12 +92,12 @@ pub fn Masthead() -> impl IntoView {
                 // of decision from choosing a section — it changes what the
                 // whole site is about, not which slice of it you are reading.
                 <nav class="desks" aria-label="News desks">
-                    <A href=edition_href("/world") attr:class="desk-link">{move || if is_en.get() { "World" } else { "国际政治" }}</A>
-                    <A href=edition_href("/markets") attr:class="desk-link">{move || if is_en.get() { "Markets" } else { "财经" }}</A>
-                    <A href=edition_href("/tech") attr:class="desk-link">{move || if is_en.get() { "Tech" } else { "科技" }}</A>
-                    <A href=edition_href("/ai") attr:class="desk-link">{move || if is_en.get() { "AI" } else { "人工智能" }}</A>
-                    <A href=edition_href("/science") attr:class="desk-link">{move || if is_en.get() { "Science" } else { "科学健康" }}</A>
-                    <A href=edition_href("/culture") attr:class="desk-link">{move || if is_en.get() { "Culture" } else { "文化" }}</A>
+                    <A href=edition_href("/world") attr:class="desk-link">{move || match language.get() { "zh" => "国际政治", "zh-hant" => "國際政治", "ja" => "国際・政治", "ko" => "국제·정치", _ => "World" }}</A>
+                    <A href=edition_href("/markets") attr:class="desk-link">{move || match language.get() { "zh" => "财经", "zh-hant" => "財經", "ja" => "経済", "ko" => "경제", _ => "Markets" }}</A>
+                    <A href=edition_href("/tech") attr:class="desk-link">{move || match language.get() { "zh" | "zh-hant" => "科技", "ja" => "テクノロジー", "ko" => "기술", _ => "Tech" }}</A>
+                    <A href=edition_href("/ai") attr:class="desk-link">{move || match language.get() { "zh" | "zh-hant" => "人工智能", _ => "AI" }}</A>
+                    <A href=edition_href("/science") attr:class="desk-link">{move || match language.get() { "zh" => "科学健康", "zh-hant" => "科學健康", "ja" => "科学・健康", "ko" => "과학·건강", _ => "Science" }}</A>
+                    <A href=edition_href("/culture") attr:class="desk-link">{move || match language.get() { "zh" | "zh-hant" => "文化", "ja" => "文化", "ko" => "문화", _ => "Culture" }}</A>
                     // Seven desks fit across a laptop; the newsroom files under
                     // twenty-three categories, and the other sixteen were
                     // reachable only from a chip row part-way down /desk. A
@@ -80,7 +109,7 @@ pub fn Masthead() -> impl IntoView {
                     // for the first moments of every page load.
                     <details class="desk-more">
                         <summary class="desk-link" aria-label="All sections">
-                            {move || if is_en.get() { "More" } else { "更多" }}
+                            {move || match language.get() { "zh" => "更多", "zh-hant" => "更多", "ja" => "その他", "ko" => "더보기", _ => "More" }}
                         </summary>
                         <div class="desk-more-panel">
                             {bg_core::domain::Category::ALL
@@ -89,13 +118,15 @@ pub fn Masthead() -> impl IntoView {
                                     view! {
                                         <a
                                             class="desk-more-link"
-                                            href=move || if is_en.get() {
-                                                format!("/en/section/{}", c.as_str())
-                                            } else {
-                                                format!("/section/{}", c.as_str())
-                                            }
+                                            href=move || format!("{}/section/{}", edition_prefix(language.get()), c.as_str())
                                         >
-                                            {move || if is_en.get() { c.label() } else { c.label_zh() }}
+                                            {move || match language.get() {
+                                                "zh" => c.label_zh(),
+                                                "zh-hant" => c.label_zh_hant(),
+                                                "ja" => c.label_ja(),
+                                                "ko" => c.label_ko(),
+                                                _ => c.label(),
+                                            }}
                                         </a>
                                     }
                                 })
@@ -104,16 +135,20 @@ pub fn Masthead() -> impl IntoView {
                     </details>
                 </nav>
                 <nav class="nav" aria-label="Sections">
-                    <A href=edition_href("/desk")>{move || if is_en.get() { "Desk" } else { "原创" }}</A>
-                    <A href=edition_href("/wire")>{move || if is_en.get() { "Wire" } else { "快讯" }}</A>
-                    <A href="/flyway">{move || if is_en.get() { "Topics" } else { "专题" }}</A>
-                    <A href="/flock">{move || if is_en.get() { "Agents" } else { "AI 编辑部" }}</A>
-                    <A href="/standards">{move || if is_en.get() { "Standards" } else { "编辑标准" }}</A>
+                    <A href=edition_href("/desk")>{move || match language.get() { "zh" => "原创", "zh-hant" => "原創", "ja" => "独自報道", "ko" => "자체 보도", _ => "Desk" }}</A>
+                    <A href=edition_href("/wire")>{move || match language.get() { "zh" => "快讯", "zh-hant" => "快訊", "ja" => "速報", "ko" => "속보", _ => "Wire" }}</A>
+                    <A href=edition_href("/flyway")>{move || match language.get() { "zh" => "专题", "zh-hant" => "專題", "ja" => "特集", "ko" => "특집", _ => "Topics" }}</A>
+                    <A href=edition_href("/flock")>{move || match language.get() { "zh" => "AI 编辑部", "zh-hant" => "AI 編輯部", "ja" => "AI編集部", "ko" => "AI 편집국", _ => "Agents" }}</A>
+                    <A href=edition_href("/standards")>{move || match language.get() { "zh" => "编辑标准", "zh-hant" => "編輯標準", "ja" => "編集基準", "ko" => "편집 기준", _ => "Standards" }}</A>
                 </nav>
                 <div class="masthead-right">
-                    <A href=switch_href attr:class="language-switch">
-                        {move || if is_en.get() { "中文" } else { "English" }}
-                    </A>
+                    <nav class="edition-switcher" aria-label="Language editions">
+                        <A href=switch_href("zh") attr:class=move || if language.get() == "zh" { "language-switch active" } else { "language-switch" } >"简中"</A>
+                        <A href=switch_href("zh-hant") attr:class=move || if language.get() == "zh-hant" { "language-switch active" } else { "language-switch" } >"繁中"</A>
+                        <A href=switch_href("en") attr:class=move || if language.get() == "en" { "language-switch active" } else { "language-switch" } >"EN"</A>
+                        <A href=switch_href("ja") attr:class=move || if language.get() == "ja" { "language-switch active" } else { "language-switch" } >"日本語"</A>
+                        <A href=switch_href("ko") attr:class=move || if language.get() == "ko" { "language-switch active" } else { "language-switch" } >"한국어"</A>
+                    </nav>
                     <ThemeToggle />
                 </div>
             </div>

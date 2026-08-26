@@ -217,6 +217,90 @@ impl Category {
             Self::Energy => "能源",
         }
     }
+
+    pub const fn label_zh_hant(&self) -> &'static str {
+        match self {
+            Self::Markets => "市場",
+            Self::Policy => "政策",
+            Self::Tech => "科技",
+            Self::Defi => "去中心化金融",
+            Self::Business => "商業",
+            Self::Security => "安全",
+            Self::Ai => "人工智能",
+            Self::Nft => "數位藏品",
+            Self::Gaming => "遊戲",
+            Self::Culture => "文化",
+            Self::Research => "研究",
+            Self::Models => "模型",
+            Self::Compute => "算力",
+            Self::Safety => "AI 安全",
+            Self::World => "國際",
+            Self::Politics => "政治",
+            Self::Health => "健康",
+            Self::Climate => "氣候",
+            Self::Space => "太空",
+            Self::Science => "科學",
+            Self::Sports => "體育",
+            Self::Entertainment => "文娛",
+            Self::Energy => "能源",
+        }
+    }
+
+    pub const fn label_ja(&self) -> &'static str {
+        match self {
+            Self::Markets => "マーケット",
+            Self::Policy => "政策",
+            Self::Tech => "テクノロジー",
+            Self::Defi => "DeFi",
+            Self::Business => "ビジネス",
+            Self::Security => "安全保障",
+            Self::Ai => "AI",
+            Self::Nft => "NFT",
+            Self::Gaming => "ゲーム",
+            Self::Culture => "文化",
+            Self::Research => "研究",
+            Self::Models => "モデル",
+            Self::Compute => "コンピュート",
+            Self::Safety => "AI安全",
+            Self::World => "国際",
+            Self::Politics => "政治",
+            Self::Health => "健康",
+            Self::Climate => "気候",
+            Self::Space => "宇宙",
+            Self::Science => "科学",
+            Self::Sports => "スポーツ",
+            Self::Entertainment => "エンタメ",
+            Self::Energy => "エネルギー",
+        }
+    }
+
+    pub const fn label_ko(&self) -> &'static str {
+        match self {
+            Self::Markets => "시장",
+            Self::Policy => "정책",
+            Self::Tech => "기술",
+            Self::Defi => "탈중앙금융",
+            Self::Business => "비즈니스",
+            Self::Security => "안보",
+            Self::Ai => "AI",
+            Self::Nft => "NFT",
+            Self::Gaming => "게임",
+            Self::Culture => "문화",
+            Self::Research => "연구",
+            Self::Models => "모델",
+            Self::Compute => "컴퓨팅",
+            Self::Safety => "AI 안전",
+            Self::World => "국제",
+            Self::Politics => "정치",
+            Self::Health => "건강",
+            Self::Climate => "기후",
+            Self::Space => "우주",
+            Self::Science => "과학",
+            Self::Sports => "스포츠",
+            Self::Entertainment => "연예",
+            Self::Energy => "에너지",
+        }
+    }
 }
 
 impl Category {
@@ -468,18 +552,31 @@ pub struct RawItemPublic {
 // ---------------------------------------------------------------------------
 
 str_enum! {
-    /// The two products are independently commissioned and edited. This is not
-    /// a translation flag: it determines source pools, prompts and front pages.
+    /// Independently commissioned editions, not translations of one feed.
     pub enum EditorialLanguage {
         Zh => "zh",
+        ZhHant => "zh-hant",
         En => "en",
+        Ja => "ja",
+        Ko => "ko",
     }
 }
 
 impl EditorialLanguage {
     pub fn from_source_lang(lang: &str) -> Self {
-        if lang.trim().to_ascii_lowercase().starts_with("zh") {
+        let lang = lang.trim().to_ascii_lowercase().replace('_', "-");
+        if lang == "zh-hant"
+            || lang.starts_with("zh-tw")
+            || lang.starts_with("zh-hk")
+            || lang.starts_with("zh-mo")
+        {
+            Self::ZhHant
+        } else if lang.starts_with("zh") {
             Self::Zh
+        } else if lang.starts_with("ja") {
+            Self::Ja
+        } else if lang.starts_with("ko") {
+            Self::Ko
         } else {
             Self::En
         }
@@ -488,7 +585,10 @@ impl EditorialLanguage {
     pub const fn html_lang(self) -> &'static str {
         match self {
             Self::Zh => "zh-CN",
+            Self::ZhHant => "zh-Hant",
             Self::En => "en",
+            Self::Ja => "ja",
+            Self::Ko => "ko",
         }
     }
 }

@@ -97,7 +97,10 @@ fn card(s: &bg_core::domain::Story, lead: Option<(&str, &str)>) -> StoryCard {
         category: s.category.as_str().into(),
         category_label: match s.editorial_language {
             bg_core::domain::EditorialLanguage::Zh => s.category.label_zh(),
+            bg_core::domain::EditorialLanguage::ZhHant => s.category.label_zh_hant(),
             bg_core::domain::EditorialLanguage::En => s.category.label(),
+            bg_core::domain::EditorialLanguage::Ja => s.category.label_ja(),
+            bg_core::domain::EditorialLanguage::Ko => s.category.label_ko(),
         }
         .into(),
         source_count: s.source_count,
@@ -996,7 +999,9 @@ pub async fn get_flyway(language: String) -> Result<FlywayPage, ServerFnError> {
     let language = bg_core::domain::EditorialLanguage::from_str(&language)
         .unwrap_or(bg_core::domain::EditorialLanguage::Zh);
 
-    let rows = bg_db::stories::flyway(db, DAYS).await.map_err(e)?;
+    let rows = bg_db::stories::flyway_for_language(db, language, DAYS)
+        .await
+        .map_err(e)?;
     let mut by_cat: BTreeMap<String, BTreeMap<chrono::NaiveDate, i64>> = BTreeMap::new();
     for (cat, day, n) in rows {
         *by_cat.entry(cat).or_default().entry(day).or_insert(0) += n;
@@ -1018,7 +1023,10 @@ pub async fn get_flyway(language: String) -> Result<FlywayPage, ServerFnError> {
             let label = bg_core::domain::Category::from_str(&cat)
                 .map(|c| match language {
                     bg_core::domain::EditorialLanguage::Zh => c.label_zh().to_string(),
+                    bg_core::domain::EditorialLanguage::ZhHant => c.label_zh_hant().to_string(),
                     bg_core::domain::EditorialLanguage::En => c.label().to_string(),
+                    bg_core::domain::EditorialLanguage::Ja => c.label_ja().to_string(),
+                    bg_core::domain::EditorialLanguage::Ko => c.label_ko().to_string(),
                 })
                 .unwrap_or_else(|_| cat.clone());
             CategoryTrend {
@@ -1031,7 +1039,7 @@ pub async fn get_flyway(language: String) -> Result<FlywayPage, ServerFnError> {
         .collect();
     categories.sort_by_key(|c| std::cmp::Reverse(c.total));
 
-    let entities = bg_db::entities::trending(db, DAYS, 14)
+    let entities = bg_db::entities::trending_for_language(db, language, DAYS, 14)
         .await
         .unwrap_or_default()
         .into_iter()

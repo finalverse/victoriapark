@@ -14,17 +14,30 @@ use uuid::Uuid;
 /// than published stories: a subject can be hot across the wires before the
 /// pipeline has turned any of it into stories, and on a tier that triages a
 /// fraction of intake it usually is.
-pub async fn recent_headlines(db: &Db, hours: i64, limit: i64) -> Result<Vec<(String, String)>> {
+pub async fn recent_headlines(
+    db: &Db,
+    language: EditorialLanguage,
+    hours: i64,
+    limit: i64,
+) -> Result<Vec<(String, String)>> {
     let rows = sqlx::query(
         "SELECT r.title, s.slug
            FROM raw_items r
            JOIN sources s ON s.id = r.source_id
           WHERE r.published_at > now() - make_interval(hours => $1)
             AND s.robots_ok
+            AND CASE
+                WHEN $2 = 'zh-hant' THEN lower(r.lang) = 'zh-hant'
+                WHEN $2 = 'zh' THEN lower(r.lang) = 'zh'
+                WHEN $2 = 'ja' THEN lower(r.lang) LIKE 'ja%'
+                WHEN $2 = 'ko' THEN lower(r.lang) LIKE 'ko%'
+                ELSE lower(r.lang) NOT LIKE 'zh%' AND lower(r.lang) NOT LIKE 'ja%' AND lower(r.lang) NOT LIKE 'ko%'
+            END
           ORDER BY r.published_at DESC
-          LIMIT $2",
+          LIMIT $3",
     )
     .bind(hours as i32)
+    .bind(language.as_str())
     .bind(limit)
     .fetch_all(&db.pool)
     .await?;
@@ -40,6 +53,7 @@ pub async fn recent_headlines(db: &Db, hours: i64, limit: i64) -> Result<Vec<(St
 /// against a subject's history rather than against itself.
 pub async fn baseline_headlines(
     db: &Db,
+    language: EditorialLanguage,
     skip_hours: i64,
     back_hours: i64,
     limit: i64,
@@ -51,11 +65,19 @@ pub async fn baseline_headlines(
           WHERE r.published_at <= now() - make_interval(hours => $1)
             AND r.published_at >  now() - make_interval(hours => $2)
             AND s.robots_ok
+            AND CASE
+                WHEN $3 = 'zh-hant' THEN lower(r.lang) = 'zh-hant'
+                WHEN $3 = 'zh' THEN lower(r.lang) = 'zh'
+                WHEN $3 = 'ja' THEN lower(r.lang) LIKE 'ja%'
+                WHEN $3 = 'ko' THEN lower(r.lang) LIKE 'ko%'
+                ELSE lower(r.lang) NOT LIKE 'zh%' AND lower(r.lang) NOT LIKE 'ja%' AND lower(r.lang) NOT LIKE 'ko%'
+            END
           ORDER BY r.published_at DESC
-          LIMIT $3",
+          LIMIT $4",
     )
     .bind(skip_hours as i32)
     .bind(back_hours as i32)
+    .bind(language.as_str())
     .bind(limit)
     .fetch_all(&db.pool)
     .await?;
@@ -70,14 +92,21 @@ pub async fn baseline_headlines(
 /// Matched on the title rather than a stored tag: the topic was *derived* from
 /// titles, so matching anywhere else would put stories in a gaggle that do not
 /// visibly belong to it, and a reader looking at the page would not see why.
-pub async fn stories_for_topic(db: &Db, topic: &str, limit: i64) -> Result<Vec<StoryId>> {
+pub async fn stories_for_topic(
+    db: &Db,
+    topic: &str,
+    language: EditorialLanguage,
+    limit: i64,
+) -> Result<Vec<StoryId>> {
     let rows = sqlx::query(
         "SELECT id FROM stories
           WHERE status = 'published' AND title ILIKE '%' || $1 || '%'
+            AND editorial_language = $2
           ORDER BY published_at DESC
-          LIMIT $2",
+          LIMIT $3",
     )
     .bind(topic)
+    .bind(language.as_str())
     .bind(limit)
     .fetch_all(&db.pool)
     .await?;
@@ -94,6 +123,7 @@ pub struct NewGaggle<'a> {
     pub source_count: i32,
     pub story_count: i32,
     pub model: Option<String>,
+    pub editorial_language: EditorialLanguage,
 }
 
 /// Open a gaggle, or refresh one that is still hot.
@@ -106,9 +136,10 @@ pub async fn upsert(db: &Db, g: &NewGaggle<'_>, run: Option<RunId>) -> Result<Uu
     let id = Uuid::new_v4();
     let row = sqlx::query(
         "INSERT INTO gaggles
-           (id, topic, slug, title, standfirst, source_count, story_count, model, run_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-         ON CONFLICT (topic) DO UPDATE SET
+           (id, topic, slug, title, standfirst, source_count, story_count, model, run_id,
+            editorial_language)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         ON CONFLICT (topic, editorial_language) DO UPDATE SET
             source_count = EXCLUDED.source_count,
             story_count  = EXCLUDED.story_count,
             last_hot_at  = now()
@@ -123,6 +154,7 @@ pub async fn upsert(db: &Db, g: &NewGaggle<'_>, run: Option<RunId>) -> Result<Uu
     .bind(g.story_count)
     .bind(&g.model)
     .bind(run.map(|r| r.into_uuid()))
+    .bind(g.editorial_language.as_str())
     .fetch_one(&db.pool)
     .await?;
     Ok(row.get::<Uuid, _>("id"))
@@ -228,14 +260,15 @@ pub async fn refresh_tracked(db: &Db) -> Result<usize> {
 }
 
 /// Whether we already have a gaggle for this topic.
-pub async fn exists(db: &Db, topic: &str) -> Result<bool> {
-    Ok(
-        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM gaggles WHERE topic = $1")
-            .bind(topic)
-            .fetch_one(&db.pool)
-            .await?
-            > 0,
+pub async fn exists(db: &Db, topic: &str, language: EditorialLanguage) -> Result<bool> {
+    Ok(sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM gaggles WHERE topic = $1 AND editorial_language = $2",
     )
+    .bind(topic)
+    .bind(language.as_str())
+    .fetch_one(&db.pool)
+    .await?
+        > 0)
 }
 
 /// A gaggle as the site renders it.
