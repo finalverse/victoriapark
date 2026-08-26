@@ -173,30 +173,48 @@ pub async fn count(db: &Db) -> Result<i64> {
 pub async fn untriaged(db: &Db, limit: i64) -> Result<Vec<RawItem>> {
     let cols = COLS
         .split(',')
-        .map(|c| format!("t.{}", c.trim()))
+        .map(|c| format!("q.{}", c.trim()))
         .collect::<Vec<_>>()
         .join(", ");
     let rows = crate::sql(format!(
         "SELECT {cols} FROM (
-           SELECT r.*,
+           SELECT t.*,
                   row_number() OVER (
-                    PARTITION BY r.source_id
-                    ORDER BY r.published_at DESC
-                  ) AS src_rank,
-                  row_number() OVER (
-                    PARTITION BY coalesce(s.beat, 'unrouted')
-                    ORDER BY r.published_at DESC
-                  ) AS desk_rank
-             FROM raw_items r
-             JOIN sources s ON s.id = r.source_id
-            WHERE NOT r.triaged AND r.aged_out_at IS NULL
-         ) t
-         -- Chinese is the primary edition, so it receives the first share of
-         -- each finite triage budget. Source and desk interleaving still
-         -- prevents any one Chinese or English firehose from crowding out the
-         -- rest of its edition.
-         ORDER BY CASE WHEN t.lang = 'zh' THEN 0 ELSE 1 END,
-                  t.src_rank ASC, t.desk_rank ASC, t.published_at DESC
+                    PARTITION BY t.edition
+                    ORDER BY t.src_rank, t.desk_rank, t.published_at DESC
+                  ) AS lang_rank
+             FROM (
+               SELECT r.*,
+                      CASE
+                        WHEN lower(r.lang) = 'zh-hant' THEN 'zh-hant'
+                        WHEN lower(r.lang) = 'zh' THEN 'zh'
+                        WHEN lower(r.lang) LIKE 'ja%' THEN 'ja'
+                        WHEN lower(r.lang) LIKE 'ko%' THEN 'ko'
+                        ELSE 'en'
+                      END AS edition,
+                      row_number() OVER (
+                        PARTITION BY r.source_id
+                        ORDER BY r.published_at DESC
+                      ) AS src_rank,
+                      row_number() OVER (
+                        PARTITION BY coalesce(s.beat, 'unrouted')
+                        ORDER BY r.published_at DESC
+                      ) AS desk_rank
+                 FROM raw_items r
+                 JOIN sources s ON s.id = r.source_id
+                WHERE NOT r.triaged AND r.aged_out_at IS NULL
+             ) t
+         ) q
+         -- Weighted edition round-robin: Simplified Chinese gets two slots per
+         -- round because it is the primary product; Traditional Chinese,
+         -- English, Japanese and Korean each get one. Without this, a busy
+         -- primary queue can delay a one-source Korean edition by hours.
+         ORDER BY CASE WHEN q.edition = 'zh' THEN (q.lang_rank + 1) / 2 ELSE q.lang_rank END,
+                  CASE q.edition
+                    WHEN 'zh' THEN 0 WHEN 'zh-hant' THEN 1 WHEN 'en' THEN 2
+                    WHEN 'ja' THEN 3 WHEN 'ko' THEN 4 ELSE 5
+                  END,
+                  q.lang_rank, q.published_at DESC
          LIMIT $1"
     ))
     .bind(limit)
