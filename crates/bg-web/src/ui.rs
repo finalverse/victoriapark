@@ -71,7 +71,7 @@ pub fn Masthead() -> impl IntoView {
         move |path: &'static str| move || format!("{}{path}", edition_prefix(language.get()));
     let switch_href = move |target: &'static str| move || switch_edition(&pathname.get(), target);
     view! {
-        <Html attr:lang=move || match language.get() {
+        <Html {..} lang=move || match language.get() {
             "zh" => "zh-CN",
             "zh-hant" => "zh-Hant",
             "ja" => "ja",
