@@ -901,7 +901,10 @@ pub fn SourcedImage(
 /// Story card, used across every listing.
 #[component]
 pub fn Card(story: StoryCard) -> impl IntoView {
-    let href = format!("/story/{}", story.slug);
+    let path = use_location().pathname.get();
+    let prefix = edition_prefix(edition_code(&path));
+    let href = format!("{prefix}/story/{}", story.slug);
+    let section_href = format!("{prefix}/section/{}", story.category);
     let is_wire = story.kind == "wire";
     view! {
         <article class="card">
@@ -916,7 +919,7 @@ pub fn Card(story: StoryCard) -> impl IntoView {
                 />
             </a>
             <div class="meta">
-                <a href=format!("/section/{}", story.category) class="kicker">
+                <a href=section_href class="kicker">
                     {story.category_label.clone()}
                 </a>
                 <span class="dot">"·"</span>

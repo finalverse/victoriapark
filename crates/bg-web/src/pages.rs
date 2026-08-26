@@ -58,7 +58,8 @@ fn language_from_path(path: &str) -> &'static str {
 
 fn site_name(language: &str) -> &'static str {
     match language {
-        "zh" | "zh-hant" => "维园网 VictoriaPark",
+        "zh" => "维园网 VictoriaPark",
+        "zh-hant" => "維園網 VictoriaPark",
         _ => "VictoriaPark",
     }
 }
@@ -80,6 +81,38 @@ fn live_label(language: &str) -> &'static str {
         "ja" => "継続追跡",
         "ko" => "지속 추적",
         _ => "LIVE",
+    }
+}
+
+fn topic_intro(language: &str, pinned: bool, sources: i32) -> String {
+    match (language, pinned) {
+        ("en", true) => {
+            "Permanent watch · continuously refreshed from first-party and independent sources. "
+                .into()
+        }
+        ("zh-hant", true) => "長期追蹤 · 持續匯入一手文件與獨立報道。 ".into(),
+        ("ja", true) => "継続追跡 · 一次資料と独立報道から随時更新。 ".into(),
+        ("ko", true) => "지속 추적 · 1차 자료와 독립 보도를 계속 반영합니다. ".into(),
+        (_, true) => "长期追踪 · 持续汇入一手文件与独立报道。 ".into(),
+        ("en", false) => {
+            format!("Opened after {sources} independent outlets converged within two days. ")
+        }
+        ("zh-hant", false) => format!("因兩日內 {sources} 個獨立來源集中報道而建立。 "),
+        ("ja", false) => format!("2日間に独立した{sources}媒体の報道が集中したため開設。 "),
+        ("ko", false) => {
+            format!("이틀 동안 독립 매체 {sources}곳의 보도가 집중되어 개설했습니다. ")
+        }
+        _ => format!("因两日内 {sources} 家独立来源集中报道而建立。 "),
+    }
+}
+
+fn topic_story_count(language: &str, stories: usize) -> String {
+    match language {
+        "en" => format!("{stories} VictoriaPark stories collected."),
+        "zh-hant" => format!("已收錄 {stories} 篇維園網報道。"),
+        "ja" => format!("VictoriaParkの記事を{stories}本収録。"),
+        "ko" => format!("VictoriaPark 기사 {stories}건을 모았습니다."),
+        _ => format!("已收录 {stories} 篇维园网报道。"),
     }
 }
 
@@ -460,7 +493,7 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                                         view! {
                                             <div class="rail-title">
                                                 <span>"The Wire"</span>
-                                                <a href="/wire">"All"</a>
+                                                <a href=format!("{}/wire", language_prefix(language))>"All"</a>
                                             </div>
                                             <div class="wire-full">
                                                 {rest
@@ -504,7 +537,7 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                                                 view! {
                                                     <div class="rail-title">
                                                         <span>"More from the Desk"</span>
-                                                        <a href="/desk">"All"</a>
+                                                        <a href=format!("{}/desk", language_prefix(language))>"All"</a>
                                                     </div>
                                                     <div class="card-grid">
                                                         {desk
@@ -519,7 +552,7 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                                                 view! {
                                                     <div class="rail-title">
                                                         <span>"Latest"</span>
-                                                        <a href="/wire">"All"</a>
+                                                        <a href=format!("{}/wire", language_prefix(language))>"All"</a>
                                                     </div>
                                                     <div class="card-grid">
                                                         {filler
@@ -533,7 +566,7 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                                     <aside>
                                         <div class="rail-title">
                                             <span>"The Wire"</span>
-                                            <a href="/wire">"All"</a>
+                                            <a href=format!("{}/wire", language_prefix(language))>"All"</a>
                                         </div>
                                         {wire
                                             .into_iter()
@@ -553,14 +586,17 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
 
 #[component]
 fn HonkBar(story: StoryCard) -> impl IntoView {
+    let path = use_location().pathname.get();
+    let language = language_from_path(&path);
+    let href = format!("{}/story/{}", language_prefix(language), story.slug);
     view! {
         <div class="honk">
             <div class="shell">
                 <span class="honk-tag">
                     <span class="honk-dot"></span>
-                    "突发"
+                    {match language { "zh" => "突发", "zh-hant" => "突發", "ja" => "速報", "ko" => "속보", _ => "Breaking" }}
                 </span>
-                <a href=format!("/story/{}", story.slug) class="honk-text">
+                <a href=href class="honk-text">
                     {story.title.clone()}
                 </a>
             </div>
@@ -570,6 +606,9 @@ fn HonkBar(story: StoryCard) -> impl IntoView {
 
 #[component]
 fn LeadStory(story: StoryCard) -> impl IntoView {
+    let path = use_location().pathname.get();
+    let prefix = language_prefix(language_from_path(&path));
+    let href = format!("{prefix}/story/{}", story.slug);
     view! {
         <article class="lead-story">
             <div class="meta">
@@ -583,10 +622,10 @@ fn LeadStory(story: StoryCard) -> impl IntoView {
                 </span>
             </div>
             <h2>
-                <a href=format!("/story/{}", story.slug)>{story.title.clone()}</a>
+                <a href=href.clone()>{story.title.clone()}</a>
             </h2>
             {(!story.dek.is_empty()).then(|| view! { <p class="dek">{story.dek.clone()}</p> })}
-            <a href=format!("/story/{}", story.slug) class="lead-media-link">
+            <a href=href class="lead-media-link">
                 <SourcedImage
                     url=story.image_url.clone()
                     alt=story.title.clone()
@@ -711,7 +750,6 @@ pub fn Gaggle() -> impl IntoView {
                     let c = g.card.clone();
                     let stories = g.stories.clone();
                     let has_model = !c.model.is_empty();
-                    let english = c.language == "en";
                     let topic_path = format!("{}/gaggle/{}", language_prefix(&c.language), c.slug);
                     view! {
                         <Title text=format!(
@@ -726,33 +764,19 @@ pub fn Gaggle() -> impl IntoView {
                         />
                         <div class="shell page">
                             <div class="gaggle-head">
-                                <span class="gaggle-tag">{if english { "Special topic" } else { "新闻专题" }}</span>
+                                <span class="gaggle-tag">{topic_label(&c.language)}</span>
                                 <h1>{c.title.clone()}</h1>
                                 <p class="lede">{c.standfirst.clone()}</p>
                                 // The argument for the page existing, stated
                                 // rather than implied.
                                 <p class="gaggle-why">
-                                    {if c.pinned {
-                                        if english {
-                                            "Permanent watch · continuously refreshed from first-party and independent sources. ".to_string()
-                                        } else {
-                                            "长期追踪 · 持续汇入一手文件与独立报道。 ".to_string()
-                                        }
-                                    } else if english {
-                                        format!("Opened after {} independent outlets converged within two days. ", c.sources)
-                                    } else {
-                                        format!("因两日内 {} 家独立来源集中报道而建立。 ", c.sources)
-                                    }}
-                                    {if english {
-                                        format!("{} VictoriaPark stories collected.", stories.len())
-                                    } else {
-                                        format!("已收录 {} 篇维园网报道。", stories.len())
-                                    }}
+                                    {topic_intro(&c.language, c.pinned, c.sources)}
+                                    {topic_story_count(&c.language, stories.len())}
                                     {has_model
                                         .then(|| {
                                             view! {
                                                 <span class="gaggle-model">
-                                                    {if english { " · Briefed by " } else { " · 简报模型：" }}
+                                                    {match c.language.as_str() { "en" => " · Briefed by ", "zh-hant" => " · 簡報模型：", "ja" => " · 要約モデル: ", "ko" => " · 브리핑 모델: ", _ => " · 简报模型：" }}
                                                     {c.model.clone()}
                                                 </span>
                                             }
@@ -770,7 +794,7 @@ pub fn Gaggle() -> impl IntoView {
                                             <aside class="topic-rail">
                                                 <div class="topic-rail-block">
                                                     <div class="rail-title">
-                                                        <span>{if english { "What to watch" } else { "接下来观察" }}</span>
+                                                        <span>{match c.language.as_str() { "en" => "What to watch", "zh-hant" => "接下來觀察", "ja" => "今後の注目点", "ko" => "향후 관전 포인트", _ => "接下来观察" }}</span>
                                                     </div>
                                                     <ul class="topic-watchlist">
                                                         {watch.into_iter().map(|w| view! { <li>{w}</li> }).collect_view()}
@@ -778,7 +802,7 @@ pub fn Gaggle() -> impl IntoView {
                                                 </div>
                                                 <div class="topic-rail-block">
                                                     <div class="rail-title">
-                                                        <span>{if english { "Primary record" } else { "一手文件" }}</span>
+                                                        <span>{match c.language.as_str() { "en" => "Primary record", "ja" => "一次資料", "ko" => "1차 자료", _ => "一手文件" }}</span>
                                                     </div>
                                                     <ol class="topic-sources">
                                                         {sources
@@ -794,12 +818,12 @@ pub fn Gaggle() -> impl IntoView {
                                     }
                                 })}
                             <div class="topic-story-head">
-                                <h2>{if english { "Latest coverage" } else { "最新报道" }}</h2>
+                                <h2>{match c.language.as_str() { "en" => "Latest coverage", "zh-hant" => "最新報道", "ja" => "最新記事", "ko" => "최신 보도", _ => "最新报道" }}</h2>
                             </div>
                             {if stories.is_empty() {
                                 view! {
                                     <Empty
-                                        message=if english { "The live brief is open; related reporting is entering the pipeline." } else { "专题简报已上线，相关报道正在进入编辑流程。" }
+                                        message=match c.language.as_str() { "en" => "The live brief is open; related reporting is entering the pipeline.", "zh-hant" => "專題簡報已上線，相關報道正在進入編輯流程。", "ja" => "特集は公開済みです。関連報道を編集工程に取り込んでいます。", "ko" => "특집 브리핑이 공개되었습니다. 관련 보도가 편집 과정에 들어오고 있습니다.", _ => "专题简报已上线，相关报道正在进入编辑流程。" }
                                         hint=""
                                     />
                                 }
@@ -896,10 +920,13 @@ fn WireEdition(language: &'static str) -> impl IntoView {
 
 #[component]
 fn WireRow(story: StoryCard, #[prop(optional)] show_beat: bool) -> impl IntoView {
+    let path = use_location().pathname.get();
+    let prefix = language_prefix(language_from_path(&path));
+    let href = format!("{prefix}/story/{}", story.slug);
     view! {
         <article class="wire-item">
             <time class="wire-time">{story.ago.clone()}</time>
-            <a href=format!("/story/{}", story.slug) class="wire-thumb-link" aria-hidden="true" tabindex="-1">
+            <a href=href.clone() class="wire-thumb-link" aria-hidden="true" tabindex="-1">
                 <SourcedImage
                     url=story.image_url.clone()
                     alt=String::new()
@@ -911,7 +938,7 @@ fn WireRow(story: StoryCard, #[prop(optional)] show_beat: bool) -> impl IntoView
             </a>
             <div>
                 <h3 class="wire-title">
-                    <a href=format!("/story/{}", story.slug)>{story.title.clone()}</a>
+                    <a href=href>{story.title.clone()}</a>
                 </h3>
                 {(!story.dek.is_empty())
                     .then(|| view! { <p class="wire-summary">{story.dek.clone()}</p> })}
