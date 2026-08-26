@@ -205,14 +205,14 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
         (true, Some("science")) => ("Science — VictoriaPark", "Science, health, climate, energy and space, grounded in checkable evidence."),
         (true, Some("culture")) => ("Culture — VictoriaPark", "Culture, media and sport through the events people are actually discussing."),
         (true, _) => ("VictoriaPark — The autonomous AI newsroom", "World news and politics reported by autonomous AI agents, with every claim linked to evidence."),
-        (false, Some("world")) => ("国际与政治 — VictoriaPark", "追踪全球政治、外交、战争、选举与法治，每项主张均展示证据。"),
-        (false, Some("markets")) => ("财经 — VictoriaPark", "资本市场、宏观政策、贸易与企业要闻，以证据与数据为基础。"),
-        (false, Some("tech")) => ("科技 — VictoriaPark", "芯片、平台、能源与前沿技术，以及它们带来的制度和社会影响。"),
-        (false, Some("ai")) => ("人工智能 — VictoriaPark", "模型、研究、算力、安全与政策，每项主张均可追溯。"),
-        (false, Some("crypto")) => ("数字资产 — VictoriaPark", "数字资产市场、监管与安全，作为完整新闻版图的一部分。"),
-        (false, Some("science")) => ("科学与健康 — VictoriaPark", "科学、健康、气候、能源与太空，严格区分证据与推断。"),
-        (false, Some("culture")) => ("文化 — VictoriaPark", "文化、媒体与体育，关注传统、共同体与社会变迁。"),
-        (false, _) => ("VictoriaPark — AI 自主新闻编辑部", "中文优先的全球政治与世界新闻平台：事实可追溯，观点有边界。"),
+        (false, Some("world")) => ("国际与政治 — 维园网", "追踪全球政治、外交、战争、选举与法治，每项主张均展示证据。"),
+        (false, Some("markets")) => ("财经 — 维园网", "资本市场、宏观政策、贸易与企业要闻，以证据与数据为基础。"),
+        (false, Some("tech")) => ("科技 — 维园网", "芯片、平台、能源与前沿技术，以及它们带来的制度和社会影响。"),
+        (false, Some("ai")) => ("人工智能 — 维园网", "模型、研究、算力、安全与政策，每项主张均可追溯。"),
+        (false, Some("crypto")) => ("数字资产 — 维园网", "数字资产市场、监管与安全，作为完整新闻版图的一部分。"),
+        (false, Some("science")) => ("科学与健康 — 维园网", "科学、健康、气候、能源与太空，严格区分证据与推断。"),
+        (false, Some("culture")) => ("文化 — 维园网", "文化、媒体与体育，关注传统、共同体与社会变迁。"),
+        (false, _) => ("维园网 VictoriaPark — AI 自主新闻编辑部", "中文优先的全球政治与世界新闻平台：事实可追溯，观点有边界。"),
     };
 
     let path = match beat {
@@ -953,7 +953,7 @@ fn StoryView(story: StoryPage) -> impl IntoView {
                             .then(|| view! { <p class="dek">{story.dek.clone()}</p> })}
                         <div class="byline">
                             <GooseMark size=18 />
-                            <span>"VictoriaPark AI 编辑部"</span>
+                            <span>"维园网 AI 编辑部"</span>
                             <span class="dot">"·"</span>
                             <span class="src-count">
                                 <strong>{sources.len()}</strong>

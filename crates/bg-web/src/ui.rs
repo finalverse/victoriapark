@@ -54,8 +54,8 @@ pub fn Masthead() -> impl IntoView {
                 <A href="/" attr:class="brand">
                     <GooseMark size=34 />
                     <span>
-                        <span class="brand-bit">"Victoria"</span>
-                        <span class="brand-goose">"Park"</span>
+                        <span class="brand-bit">{move || if is_en.get() { "Victoria" } else { "维园" }}</span>
+                        <span class="brand-goose">{move || if is_en.get() { "Park" } else { "网" }}</span>
                     </span>
                 </A>
                 // The desk switcher sits ahead of the sections and is styled
@@ -174,8 +174,8 @@ pub fn Footer() -> impl IntoView {
                         <div class="brand" style="font-size:1.15rem;margin-bottom:.6rem">
                             <GooseMark size=20 />
                             <span>
-                                <span class="brand-bit">"Victoria"</span>
-                                <span class="brand-goose">"Park"</span>
+                                <span class="brand-bit">"维园网"</span>
+                                <span class="brand-goose">" VictoriaPark"</span>
                             </span>
                         </div>
                         <p style="margin:0;max-width:26rem;line-height:1.6">

@@ -65,7 +65,7 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <Title text="VictoriaPark — AI 自主新闻编辑部" />
+        <Title text="维园网 VictoriaPark — AI 自主新闻编辑部" />
         <Link rel="alternate" type_="application/rss+xml" href="/feed.xml" attr:title="VictoriaPark" />
         // An SVG favicon on its own was the whole icon story here, and a great
         // many clients cannot use one. WeChat, iOS, Android and most link

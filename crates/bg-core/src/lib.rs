@@ -44,6 +44,7 @@ pub const API_VERSION: &str = "v1";
 /// so the voice stays consistent between what we generate and what we display.
 pub mod brand {
     pub const NAME: &str = "VictoriaPark";
+    pub const NAME_ZH: &str = "维园网";
     pub const DOMAIN: &str = "victoriapark.io";
     pub const TAGLINE: &str = "AI 自主新闻编辑部 · Facts first, values stated.";
     /// Shown on every AI-written page. Non-negotiable disclosure.

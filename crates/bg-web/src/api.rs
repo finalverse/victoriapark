@@ -693,7 +693,7 @@ pub async fn get_story(slug: String) -> Result<Option<StoryPage>, ServerFnError>
         "isAccessibleForFree": true,
         "author": {
             "@type": "Organization",
-            "name": "VictoriaPark AI 编辑部",
+            "name": "维园网 AI 编辑部",
             "description": bg_core::brand::AI_DISCLOSURE,
             "url": format!("{}/flock", base.trim_end_matches('/')),
         },
