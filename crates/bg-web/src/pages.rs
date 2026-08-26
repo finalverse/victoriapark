@@ -497,7 +497,7 @@ fn DeskEdition(language: &'static str) -> impl IntoView {
     );
     let english = language == "en";
     view! {
-        <Title text=if english { "The Desk — VictoriaPark" } else { "原创报道 — VictoriaPark" } />
+        <Title text=if english { "The Desk — VictoriaPark" } else { "原创报道 — 维园网" } />
         <div class="shell page">
             <div class="page-head">
                 <h1>{if english { "The Desk" } else { "原创报道" }}</h1>
@@ -580,7 +580,11 @@ pub fn Gaggle() -> impl IntoView {
                         format!("/gaggle/{}", c.slug)
                     };
                     view! {
-                        <Title text=format!("{} — VictoriaPark", c.title) />
+                        <Title text=format!(
+                            "{} — {}",
+                            c.title,
+                            if english { "VictoriaPark" } else { "维园网" },
+                        ) />
                         <ShareMeta
                             title=c.title.clone()
                             description=c.standfirst.clone()
@@ -608,7 +612,7 @@ pub fn Gaggle() -> impl IntoView {
                                     {if english {
                                         format!("{} VictoriaPark stories collected.", stories.len())
                                     } else {
-                                        format!("已收录 {} 篇 VictoriaPark 报道。", stories.len())
+                                        format!("已收录 {} 篇维园网报道。", stories.len())
                                     }}
                                     {has_model
                                         .then(|| {
@@ -704,7 +708,7 @@ fn WireEdition(language: &'static str) -> impl IntoView {
     );
     let english = language == "en";
     view! {
-        <Title text=if english { "The Wire — VictoriaPark" } else { "全球快讯 — VictoriaPark" } />
+        <Title text=if english { "The Wire — VictoriaPark" } else { "全球快讯 — 维园网" } />
         <div class="shell page">
             <div class="page-head">
                 <h1>{if english { "The Wire" } else { "全球快讯" }}</h1>
@@ -823,6 +827,7 @@ pub fn SectionEn() -> impl IntoView {
 
 #[component]
 fn SectionEdition(language: &'static str) -> impl IntoView {
+    let english = language == "en";
     let params = use_params_map();
     let data = Resource::new(
         move || {
@@ -839,7 +844,10 @@ fn SectionEdition(language: &'static str) -> impl IntoView {
             |pair| {
                 let (label, stories) = pair;
                 view! {
-                    <Title text=format!("{label} — VictoriaPark") />
+                    <Title text=format!(
+                        "{label} — {}",
+                        if english { "VictoriaPark" } else { "维园网" },
+                    ) />
                     <div class="shell page">
                         <div class="page-head">
                             <h1>{label.clone()}</h1>
@@ -933,9 +941,14 @@ fn StoryView(story: StoryPage) -> impl IntoView {
     let quotes = story.quotes.clone();
     let analysis = story.analysis.clone();
     let has_claims = !claims.is_empty();
+    let site_name = if story.canonical.contains("/en/story/") {
+        "VictoriaPark"
+    } else {
+        "维园网"
+    };
 
     view! {
-        <Title text=format!("{} — VictoriaPark", story.headline) />
+        <Title text=format!("{} — {site_name}", story.headline) />
         <StoryMeta story=story.clone() />
         <div class="shell page">
             <div class="split">
@@ -1231,7 +1244,7 @@ fn ProvenanceStrip(runs: Vec<RunLine>) -> impl IntoView {
 pub fn Flock() -> impl IntoView {
     let data = Resource::new(|| (), |_| get_flock());
     view! {
-        <Title text="AI 编辑部 — VictoriaPark" />
+        <Title text="AI 编辑部 — 维园网" />
         <div class="shell page">
             <div class="page-head">
                 <h1>"AI 编辑部"</h1>
@@ -1402,7 +1415,7 @@ fn AgentTile(agent: AgentCard) -> impl IntoView {
 pub fn Prices() -> impl IntoView {
     let data = Resource::new(|| (), |_| get_prices());
     view! {
-        <Title text="Markets — VictoriaPark" />
+        <Title text="Markets — 维园网" />
         <div class="shell page">
             <div class="page-head">
                 <h1>"Markets"</h1>
@@ -1558,7 +1571,7 @@ fn FlywayEdition(language: &'static str) -> impl IntoView {
     let english = language == "en";
     let data = Resource::new(move || language, |lang| get_flyway(lang.to_string()));
     view! {
-        <Title text=if english { "Topics — VictoriaPark" } else { "新闻专题 — VictoriaPark" } />
+        <Title text=if english { "Topics — VictoriaPark" } else { "新闻专题 — 维园网" } />
         <div class="shell page">
             <div class="page-head">
                 <h1>{if english { "Topics" } else { "新闻专题" }}</h1>

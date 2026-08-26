@@ -337,11 +337,22 @@ pub fn ShareMeta(
     } else {
         (format!("{base}/og-default.png"), true)
     };
+    let english = url
+        .split_once("://")
+        .and_then(|(_, rest)| rest.split_once('/').map(|(_, path)| path))
+        .is_some_and(|path| path == "en" || path.starts_with("en/"));
+    let site_name = if english { "VictoriaPark" } else { "维园网" };
+    let locale = if english { "en" } else { "zh_CN" };
+    let author = if english {
+        "VictoriaPark AI Desk"
+    } else {
+        "维园网 AI 编辑部"
+    };
     view! {
         <Meta name="description" content=description.clone() />
         <Meta property="og:type" content=kind />
-        <Meta property="og:site_name" content="VictoriaPark" />
-        <Meta property="og:locale" content="en" />
+        <Meta property="og:site_name" content=site_name />
+        <Meta property="og:locale" content=locale />
         <Meta property="og:title" content=title.clone() />
         <Meta property="og:description" content=description.clone() />
         <Meta property="og:url" content=url.clone() />
@@ -396,7 +407,7 @@ pub fn ShareMeta(
             })}
         {(kind == "article")
             .then(|| {
-                view! { <Meta property="article:author" content="VictoriaPark AI 编辑部" /> }
+                view! { <Meta property="article:author" content=author /> }
             })}
     }
 }
@@ -461,7 +472,7 @@ pub fn SkeinBlock(analysis: crate::model::AnalysisCard) -> impl IntoView {
                 <span class="analysis-mark">
                     <GooseMark size=16 />
                 </span>
-                <h2 id="analysis-h">"VictoriaPark 纵深"</h2>
+                <h2 id="analysis-h">"维园网纵深"</h2>
                 <span class="analysis-tag">"AI analysis"</span>
             </div>
 
@@ -496,7 +507,7 @@ pub fn SkeinBlock(analysis: crate::model::AnalysisCard) -> impl IntoView {
                 })}
 
             <p class="analysis-foot">
-                "VictoriaPark 独立分析，依据下列来源；这部分是推断，而非来源已经报道或交叉证实的事实。 "
+                "维园网独立分析，依据下列来源；这部分是推断，而非来源已经报道或交叉证实的事实。 "
                 {has_model
                     .then(|| {
                         view! {
