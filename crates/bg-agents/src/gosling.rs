@@ -174,3 +174,14 @@ pub async fn run(ctx: &Ctx, limit: i64) -> Result<usize> {
     info!(triaged, "gosling pass complete");
     Ok(triaged)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SYSTEM;
+
+    #[test]
+    fn intake_prompt_requires_a_complete_batch() {
+        assert!(SYSTEM.contains("Return exactly one `items` entry"));
+        assert!(SYSTEM.contains("never omit an item"));
+    }
+}
