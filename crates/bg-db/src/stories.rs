@@ -238,6 +238,34 @@ pub async fn open(db: &Db, limit: i64) -> Result<Vec<Story>> {
     rows.iter().map(from_row).collect()
 }
 
+/// Stories still moving through the pipeline, interleaved by desk.
+///
+/// A global `ORDER BY newsworthiness` is a reasonable reading list and a bad
+/// publishing queue: a burst of world news can occupy every one of the next
+/// sixty slots while markets, technology and science quietly receive no
+/// update.  The row number is calculated within each desk and then the rows
+/// are taken one pass across all desks at a time.  It preserves priority
+/// *inside* a desk while making a live newsroom visibly cover its whole brief.
+pub async fn open_balanced(db: &Db, limit: i64) -> Result<Vec<Story>> {
+    let rows = crate::sql(format!(
+        "SELECT {COLS} FROM (
+             SELECT {COLS},
+                    row_number() OVER (
+                        PARTITION BY beat
+                        ORDER BY newsworthiness DESC, updated_at DESC
+                    ) AS desk_slot
+               FROM stories
+              WHERE status IN ('triage','clustering','drafting','review')
+         ) queued
+         ORDER BY desk_slot ASC, newsworthiness DESC, updated_at DESC
+         LIMIT $1"
+    ))
+    .bind(limit)
+    .fetch_all(&db.pool)
+    .await?;
+    rows.iter().map(from_row).collect()
+}
+
 /// Published Wire stories that never got a usable summary, newest first.
 ///
 /// The offline stub could only restate the headline, and a dek that restates

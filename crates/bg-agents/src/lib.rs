@@ -134,7 +134,12 @@ impl Default for FlockConfig {
             // single agent reaching this has taken half of everything and is
             // almost certainly looping. A ceiling nothing can ever touch would
             // be a number on a page, not a control.
-            wire_summary_floor: 65,
+            // A Wire is the first readable account of a developing story.
+            // Sixty-five discarded too much fresh, well-sourced reporting as
+            // a bare link; forty-five still leaves low-signal items as
+            // pointers while giving the fast desk enough range to explain
+            // what readers are seeing.
+            wire_summary_floor: 45,
             max_analyses_per_day: 20,
             agent_budget_ccc: bg_core::mandate::CCC / 10,
             ccc_per_mtok: bg_core::mandate::DEFAULT_CCC_PER_MTOK,

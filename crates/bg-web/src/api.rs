@@ -189,7 +189,10 @@ pub async fn get_front_page(
     let language = bg_core::domain::EditorialLanguage::from_str(&language)
         .unwrap_or(bg_core::domain::EditorialLanguage::Zh);
     let db = db();
-    let ranked = bg_db::stories::front_page_for_language(db, beat, language, 40)
+    // Keep enough of the ranked pool for a complete top-ten focus list and a
+    // dense, constantly changing page beneath it.  Forty was tuned for a
+    // sparse launch; a live multilingual desk needs headroom as sources grow.
+    let ranked = bg_db::stories::front_page_for_language(db, beat, language, 72)
         .await
         .map_err(e)?;
 
@@ -229,7 +232,7 @@ pub async fn get_front_page(
         .map(|s| card(s, None))
         .collect();
 
-    let wire_entries = bg_db::stories::wire_for_language(db, beat, language, 14, 0)
+    let wire_entries = bg_db::stories::wire_for_language(db, beat, language, 24, 0)
         .await
         .map_err(e)?;
     let mut wire: Vec<StoryCard> = wire_entries
@@ -302,7 +305,7 @@ pub async fn get_front_page(
     // Live only — a topic nobody has written about for two days is an archive
     // page, not a special topic, and offering it as one is how a news site ends
     // up looking abandoned.
-    let gaggles: Vec<GaggleCard> = bg_db::gaggles::live_for_language(db, language, 48, 8)
+    let gaggles: Vec<GaggleCard> = bg_db::gaggles::live_for_language(db, language, 48, 10)
         .await
         .unwrap_or_default()
         .into_iter()

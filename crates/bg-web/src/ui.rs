@@ -92,8 +92,8 @@ pub fn Masthead() -> impl IntoView {
                 // of decision from choosing a section — it changes what the
                 // whole site is about, not which slice of it you are reading.
                 <nav class="desks" aria-label="News desks">
-                    <A href=edition_href("/world") attr:class="desk-link">{move || match language.get() { "zh" => "国际政治", "zh-hant" => "國際政治", "ja" => "国際・政治", "ko" => "국제·정치", _ => "World" }}</A>
-                    <A href=edition_href("/markets") attr:class="desk-link">{move || match language.get() { "zh" => "财经", "zh-hant" => "財經", "ja" => "経済", "ko" => "경제", _ => "Markets" }}</A>
+                    <A href=edition_href("/world") attr:class="desk-link">{move || match language.get() { "zh" => "时政新闻", "zh-hant" => "國際政治", "ja" => "国際・政治", "ko" => "국제·정치", _ => "World" }}</A>
+                    <A href=edition_href("/markets") attr:class="desk-link">{move || match language.get() { "zh" => "财经金融", "zh-hant" => "財經", "ja" => "経済", "ko" => "경제", _ => "Markets" }}</A>
                     <A href=edition_href("/tech") attr:class="desk-link">{move || match language.get() { "zh" | "zh-hant" => "科技", "ja" => "テクノロジー", "ko" => "기술", _ => "Tech" }}</A>
                     <A href=edition_href("/ai") attr:class="desk-link">{move || match language.get() { "zh" | "zh-hant" => "人工智能", _ => "AI" }}</A>
                     <A href=edition_href("/science") attr:class="desk-link">{move || match language.get() { "zh" => "科学健康", "zh-hant" => "科學健康", "ja" => "科学・健康", "ko" => "과학·건강", _ => "Science" }}</A>
@@ -135,6 +135,7 @@ pub fn Masthead() -> impl IntoView {
                     </details>
                 </nav>
                 <nav class="nav" aria-label="Sections">
+                    <a href=move || format!("{}#focus-news", edition_prefix(language.get()))>{move || match language.get() { "zh" => "焦点新闻", "zh-hant" => "焦點", "ja" => "注目", "ko" => "주요", _ => "Focus" }}</a>
                     <A href=edition_href("/desk")>{move || match language.get() { "zh" => "原创", "zh-hant" => "原創", "ja" => "独自報道", "ko" => "자체 보도", _ => "Desk" }}</A>
                     <A href=edition_href("/wire")>{move || match language.get() { "zh" => "快讯", "zh-hant" => "快訊", "ja" => "速報", "ko" => "속보", _ => "Wire" }}</A>
                     <A href=edition_href("/flyway")>{move || match language.get() { "zh" => "专题", "zh-hant" => "專題", "ja" => "特集", "ko" => "특집", _ => "Topics" }}</A>
@@ -221,8 +222,8 @@ pub fn Footer() -> impl IntoView {
                     <div>
                         <h4>"Read"</h4>
                         <ul>
-                            <li><A href="/world">"国际政治"</A></li>
-                            <li><A href="/markets">"财经"</A></li>
+                            <li><A href="/world">"时政新闻"</A></li>
+                            <li><A href="/markets">"财经金融"</A></li>
                             <li><A href="/tech">"科技"</A></li>
                             <li><A href="/desk">"原创报道"</A></li>
                             <li><A href="/wire">"全球快讯"</A></li>
@@ -249,6 +250,7 @@ pub fn Footer() -> impl IntoView {
                 <div class="disclosure">
                     <span>{bg_core::brand::AI_DISCLOSURE}</span>
                     <span>"每项主张链接来源；不复刻受版权保护的全文。"</span>
+                    <span>"简中海外版不面向中国大陆、香港、澳门做本地化或定向分发。"</span>
                 </div>
             </div>
         </footer>

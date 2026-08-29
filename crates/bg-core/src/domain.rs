@@ -192,7 +192,7 @@ impl Category {
 
     pub const fn label_zh(&self) -> &'static str {
         match self {
-            Self::Markets => "市场",
+            Self::Markets => "财经金融",
             Self::Policy => "政策",
             Self::Tech => "科技",
             Self::Defi => "去中心化金融",
@@ -207,7 +207,7 @@ impl Category {
             Self::Compute => "算力",
             Self::Safety => "AI 安全",
             Self::World => "国际",
-            Self::Politics => "政治",
+            Self::Politics => "时政新闻",
             Self::Health => "健康",
             Self::Climate => "气候",
             Self::Space => "太空",

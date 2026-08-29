@@ -160,8 +160,8 @@ fn front_copy(language: &str, beat: Option<&str>) -> (&'static str, &'static str
         ("ko", Some("science")) => ("과학·건강 — VictoriaPark", "과학, 건강, 기후, 에너지와 우주를 근거 중심으로 다룹니다."),
         ("ko", Some("culture")) => ("문화 — VictoriaPark", "문화, 미디어와 스포츠의 주요 이슈를 전합니다."),
         ("ko", _) => ("VictoriaPark 한국어판", "한국어 독자를 위해 독립 편집되는 AI 에이전트 기반 국제 뉴스룸."),
-        ("zh", Some("world")) => ("国际与政治 — 维园网", "追踪全球政治、外交、战争、选举与法治，每项主张均展示证据。"),
-        ("zh", Some("markets")) => ("财经 — 维园网", "资本市场、宏观政策、贸易与企业要闻，以证据与数据为基础。"),
+        ("zh", Some("world")) => ("时政新闻 — 维园网", "追踪全球政治、外交、战争、选举与法治；面向海外华语读者，每项主张均展示证据。"),
+        ("zh", Some("markets")) => ("财经金融 — 维园网", "资本市场、宏观政策、贸易、货币、产业与企业要闻，以证据与数据为基础。"),
         ("zh", Some("tech")) => ("科技 — 维园网", "芯片、平台、能源与前沿技术，以及它们带来的制度和社会影响。"),
         ("zh", Some("ai")) => ("人工智能 — 维园网", "模型、研究、算力、安全与政策，每项主张均可追溯。"),
         ("zh", Some("crypto")) => ("数字资产 — 维园网", "数字资产市场、监管与安全，作为完整新闻版图的一部分。"),
@@ -375,6 +375,12 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
             data,
             |fp| view! {
                 {fp.honk.clone().map(|h| view! { <HonkBar story=h /> })}
+                {(language == "zh").then(|| view! {
+                    <section class="edition-scope shell" aria-label="Simplified Chinese edition scope">
+                        <strong>"海外简中版"</strong>
+                        <span>"面向中国大陆、香港、澳门以外的海外华语读者；不作上述地区的本地化或定向分发。与中国有关的全球新闻仍按证据和公共价值报道。"</span>
+                    </section>
+                })}
                 // Special topics are the front-page radar: persistent watches
                 // and fast-rising subjects belong above any individual story.
                 {(!fp.gaggles.is_empty())
@@ -445,10 +451,10 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                     .then(|| {
                         let items = fp.hotline.clone();
                         view! {
-                            <section class="hotline-pool shell" aria-label="Live headline ranking">
+                            <section id="focus-news" class="hotline-pool shell" aria-label="Live headline ranking">
                                 <div class="hotline-pool-head">
-                                    <strong>{match language { "zh" => "热榜", "zh-hant" => "熱榜", "ja" => "速報ランキング", "ko" => "실시간 뉴스 순위", _ => "Live headline ranking" }}</strong>
-                                    <span>{match language { "zh" => "按重要性与时效实时排序", "zh-hant" => "按重要性與時效即時排序", "ja" => "重要度と鮮度で更新", "ko" => "중요도와 최신성 기준", _ => "Ranked by importance and recency" }}</span>
+                                    <strong>{match language { "zh" => "焦点新闻 · 本栏热榜 TOP 10", "zh-hant" => "焦點新聞 · 熱榜 TOP 10", "ja" => "注目ニュース · TOP 10", "ko" => "주요 뉴스 · TOP 10", _ => "Focus news · Top 10" }}</strong>
+                                    <span>{match language { "zh" => "每个栏目按重要性与时效实时排序", "zh-hant" => "每個欄目按重要性與時效即時排序", "ja" => "各セクションを重要度と鮮度で更新", "ko" => "각 섹션을 중요도와 최신성 기준으로 갱신", _ => "Each desk ranked by importance and recency" }}</span>
                                 </div>
                                 <ol class="hotline-list">
                                     {items.into_iter().enumerate().map(|(index, story)| view! {

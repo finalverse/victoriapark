@@ -212,8 +212,27 @@ pub async fn run_once(ctx: &Ctx, opts: &RunOpts) -> Result<PipelineReport> {
         Err(e) => rep.errors.push(format!("curator: {e}")),
     }
 
+    // -- Enrich before publication -----------------------------------------
+    //
+    // A Wire is allowed to publish as a sourced pointer, but that is the
+    // fallback, not the product.  Running extraction after routing meant the
+    // Herald almost always met a fresh story with no source text and had no
+    // choice but to emit the fallback.  Curator has now formed the story, so
+    // fetch the publisher pages it is permitted to fetch *before* asking the
+    // desk or Wire to write.  This keeps the existing bandwidth bound while
+    // making the first public version a useful, attributed briefing.
+    if opts.max_enrich > 0 {
+        match scout::enrich(ctx, opts.max_enrich).await {
+            Ok((got, _)) => rep.enriched = got,
+            Err(e) => rep.errors.push(format!("enrich: {e}")),
+        }
+    }
+
     // -- Desk / Wire routing ------------------------------------------------
-    let open = bg_db::stories::open(&ctx.db, 60).await?;
+    // A full desk cannot be allowed to starve every other desk.  The balanced
+    // query still puts the strongest story first within each beat, but gives
+    // every active category a path to publication in this pass.
+    let open = bg_db::stories::open_balanced(&ctx.db, 60).await?;
     let mut desk_budget = ctx.cfg.desk_max_per_run;
 
     for story in open {
@@ -270,19 +289,6 @@ pub async fn run_once(ctx: &Ctx, opts: &RunOpts) -> Result<PipelineReport> {
                     rep.errors.push(format!("wire {}: {e}", story.slug));
                 }
             }
-        }
-    }
-
-    // -- Scout, again ----------------------------------------------------------
-    // Fetch the article text behind newly-clustered items. Placed after
-    // clustering because `needing_extraction` only considers items attached to
-    // a story — fetching a publisher's page for something we may never print
-    // spends their bandwidth for nothing — and before the Skein, which cannot
-    // say anything without it.
-    if opts.max_enrich > 0 {
-        match scout::enrich(ctx, opts.max_enrich).await {
-            Ok((got, _)) => rep.enriched = got,
-            Err(e) => rep.errors.push(format!("enrich: {e}")),
         }
     }
 
