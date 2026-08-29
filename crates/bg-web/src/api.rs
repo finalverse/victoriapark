@@ -217,6 +217,7 @@ pub async fn get_front_page(
         .find(|s| !bg_core::text::looks_truncated(&s.title))
         .or_else(|| ranked.first())
         .map(|s| card(s, None));
+    let hotline: Vec<StoryCard> = ranked.iter().take(10).map(|s| card(s, None)).collect();
 
     // The Desk row keeps its own character — original synthesis, not pointers —
     // minus whatever became the lead.
@@ -301,7 +302,7 @@ pub async fn get_front_page(
     // Live only — a topic nobody has written about for two days is an archive
     // page, not a special topic, and offering it as one is how a news site ends
     // up looking abandoned.
-    let gaggles: Vec<GaggleCard> = bg_db::gaggles::live_for_language(db, language, 48, 3)
+    let gaggles: Vec<GaggleCard> = bg_db::gaggles::live_for_language(db, language, 48, 8)
         .await
         .unwrap_or_default()
         .into_iter()
@@ -334,6 +335,7 @@ pub async fn get_front_page(
         desk,
         wire,
         gaggles,
+        hotline,
         prices,
         honk,
     })

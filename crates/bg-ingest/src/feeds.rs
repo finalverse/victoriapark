@@ -60,14 +60,28 @@ fn is_aggregator(slug: &str) -> bool {
 }
 
 fn source_language(slug: &str, advertised: &str) -> String {
-    if slug.starts_with("hot-") || slug.starts_with("gnews-zh-") || slug.starts_with("voa-zh-") {
+    if slug.starts_with("gnews-zh-hant-") {
+        "zh-hant".into()
+    } else if slug.starts_with("hot-")
+        || slug.starts_with("gnews-zh-")
+        || slug.starts_with("voa-zh-")
+        || slug.ends_with("-zh")
+    {
         "zh".into()
     } else if slug.starts_with("rthk-") || slug.starts_with("cna-") {
         "zh-hant".into()
-    } else if slug.starts_with("nhk-") || slug.starts_with("nippon-") {
+    } else if slug.starts_with("gnews-ja-")
+        || slug.starts_with("nhk-")
+        || slug.starts_with("nippon-")
+    {
         "ja".into()
-    } else if slug.starts_with("yna-") || slug.starts_with("kbs-ko-") {
+    } else if slug.starts_with("gnews-ko-")
+        || slug.starts_with("yna-")
+        || slug.starts_with("kbs-ko-")
+    {
         "ko".into()
+    } else if slug.starts_with("gnews-en-") {
+        "en".into()
     } else {
         bg_core::text::normalize_lang(advertised)
     }
@@ -451,4 +465,19 @@ pub async fn poll_all(
         .buffer_unordered(concurrency.max(1))
         .collect()
         .await
+}
+
+#[cfg(test)]
+mod language_tests {
+    #[test]
+    fn chinese_publishers_without_feed_language_stay_in_the_zh_edition() {
+        for slug in [
+            "chinanews-scroll-zh",
+            "sina-society-zh",
+            "bbc-zh",
+            "gnews-zh-society",
+        ] {
+            assert_eq!(super::source_language(slug, "en"), "zh", "{slug}");
+        }
+    }
 }

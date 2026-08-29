@@ -19,6 +19,7 @@ pub struct ScoutReport {
     pub sources_stale: usize,
     pub items_new: usize,
     pub not_modified: usize,
+    pub topics_searched: usize,
 }
 
 /// Poll every source that is due.
@@ -104,16 +105,86 @@ pub async fn run(ctx: &Ctx) -> Result<ScoutReport> {
             }
         }
 
+        // A permanent topic is a standing search assignment, not just a page
+        // that waits for the general feeds to happen across it. Sweep a few on
+        // every pass so every edition's dossier roster is revisited without
+        // bursting dozens of requests at Google News.
+        let due = bg_db::gaggles::searches_due(&ctx.db, 20, 6)
+            .await
+            .unwrap_or_default();
+        for topic in due {
+            let (source_slug, hl, gl, ceid) = match topic.editorial_language {
+                bg_core::domain::EditorialLanguage::Zh => {
+                    ("gnews-zh-topics", "zh-CN", "CN", "CN:zh-Hans")
+                }
+                bg_core::domain::EditorialLanguage::ZhHant => {
+                    ("gnews-zh-hant-topics", "zh-TW", "TW", "TW:zh-Hant")
+                }
+                bg_core::domain::EditorialLanguage::Ja => {
+                    ("gnews-ja-topics", "ja", "JP", "JP:ja")
+                }
+                bg_core::domain::EditorialLanguage::Ko => {
+                    ("gnews-ko-topics", "ko", "KR", "KR:ko")
+                }
+                bg_core::domain::EditorialLanguage::En => {
+                    ("gnews-en-topics", "en-US", "US", "US:en")
+                }
+            };
+            if let Ok(base) = bg_db::sources::by_slug(&ctx.db, source_slug).await {
+                let mut terms: Vec<String> = topic
+                    .anchor_terms
+                    .iter()
+                    .take(4)
+                    .chain(topic.keywords.iter().take(5))
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                terms.sort();
+                terms.dedup();
+                if terms.is_empty() {
+                    let _ = bg_db::gaggles::mark_searched(&ctx.db, topic.id).await;
+                    continue;
+                }
+                let query = format!("({}) when:2d", terms.join(" OR "));
+                let mut search = base.clone();
+                if let Ok(mut url) = reqwest::Url::parse("https://news.google.com/rss/search") {
+                    url.query_pairs_mut()
+                        .append_pair("q", &query)
+                        .append_pair("hl", hl)
+                        .append_pair("gl", gl)
+                        .append_pair("ceid", ceid);
+                    search.url = url.to_string();
+                    search.etag = None;
+                    search.last_modified = None;
+                    let report = bg_ingest::feeds::poll_source(&ctx.db, &ctx.http, &search).await;
+                    r.items_new += report.inserted;
+                    if report.error.is_some() {
+                        r.sources_failed += 1;
+                    } else {
+                        r.sources_polled += 1;
+                    }
+                    r.topics_searched += 1;
+                    info!(topic = %topic.title, language = %topic.editorial_language, inserted = report.inserted, "topic discovery swept");
+                }
+            }
+            let _ = bg_db::gaggles::mark_searched(&ctx.db, topic.id).await;
+        }
+
         info!(
             polled = r.sources_polled,
             failed = r.sources_failed,
             new = r.items_new,
             not_modified = r.not_modified,
+            topics = r.topics_searched,
             "scout swept"
         );
         let note = format!(
-            "{} new items from {} sources ({} unchanged, {} failed)",
-            r.items_new, r.sources_polled, r.not_modified, r.sources_failed
+            "{} new items from {} sources; {} topic searches ({} unchanged, {} failed)",
+            r.items_new,
+            r.sources_polled,
+            r.topics_searched,
+            r.not_modified,
+            r.sources_failed
         );
         Ok(StageOutput::plain(r, note))
     })

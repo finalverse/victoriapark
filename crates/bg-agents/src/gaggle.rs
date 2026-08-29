@@ -32,6 +32,11 @@ use tracing::info;
 /// seven sources, Trump, Bitcoin, OpenAI) and rejected everything else, which
 /// is about the rate a front page can carry.
 pub const MIN_SOURCES: usize = 5;
+/// Local Chinese public-interest stories often spread through regional
+/// outlets before a national wire notices them. Four genuinely independent
+/// publishers is enough to open a dossier there; a hot-list platform by itself
+/// still counts as one and cannot clear the gate.
+pub const ZH_MIN_SOURCES: usize = 4;
 
 /// How far back to look for convergence.
 pub const WINDOW_HOURS: i64 = 48;
@@ -45,7 +50,7 @@ pub const BASELINE_DAYS: f32 = 14.0;
 
 pub const SYSTEM: &str = include_str!("../../../prompts/gaggle.md");
 pub const TRACKED_SYSTEM: &str = include_str!("../../../prompts/trade-watch.md");
-const TRACKED_BRIEF_HOURS: i64 = 6;
+const TRACKED_BRIEF_HOURS: i64 = 3;
 
 #[derive(Debug, Deserialize)]
 pub struct Framing {
@@ -145,7 +150,9 @@ async fn refresh_language(ctx: &Ctx, language: EditorialLanguage) -> Result<usiz
     .await?;
 
     let mut refreshed = 0usize;
-    for heat in bg_core::trends::rank_spikes(&headlines, &baseline, BASELINE_DAYS, MIN_SOURCES) {
+    for heat in
+        bg_core::trends::rank_spikes(&headlines, &baseline, BASELINE_DAYS, min_sources(language))
+    {
         if !bg_db::gaggles::exists(&ctx.db, &heat.topic, language).await? {
             continue;
         }
@@ -203,7 +210,8 @@ async fn run_language(ctx: &Ctx, max_new: usize, language: EditorialLanguage) ->
         20_000,
     )
     .await?;
-    let hot = bg_core::trends::rank_spikes(&headlines, &baseline, BASELINE_DAYS, MIN_SOURCES);
+    let hot =
+        bg_core::trends::rank_spikes(&headlines, &baseline, BASELINE_DAYS, min_sources(language));
     if hot.is_empty() {
         info!(
             headlines = headlines.len(),
@@ -384,6 +392,17 @@ async fn refresh_tracked_briefs(ctx: &Ctx, max: usize) -> Result<usize> {
                     evidence.push_str(&format!(" [{}]", at.to_rfc3339()));
                 }
                 evidence.push('\n');
+                if let Ok(refs) = bg_db::stories::source_refs(&ctx.db, *id).await {
+                    for source in refs.iter().take(8) {
+                        evidence.push_str("    source: ");
+                        evidence.push_str(&source.name);
+                        evidence.push_str(" | ");
+                        evidence.push_str(&source.title);
+                        evidence.push_str(" | ");
+                        evidence.push_str(&source.url);
+                        evidence.push('\n');
+                    }
+                }
             }
         }
         if evidence.is_empty() {
@@ -420,9 +439,9 @@ async fn refresh_tracked_briefs(ctx: &Ctx, max: usize) -> Result<usize> {
             None,
             "trade-watch",
             |run| async move {
-                let req = Request::new("gander.trade_watch", ModelTier::Mid, system, prompt)
+                let req = Request::new("gander.topic_dossier", ModelTier::Mid, system, prompt)
                     .with_schema(tracked_schema())
-                    .with_max_tokens(2_200);
+                    .with_max_tokens(3_400);
                 let (brief, completion) = ctx.llm.complete_json::<TrackedFraming>(&req).await?;
                 let standfirst = brief.standfirst.trim();
                 let analysis = brief.analysis_md.trim();
@@ -475,6 +494,17 @@ const _: () = assert!(
     MIN_SOURCES >= 5,
     "threshold low enough to make every company a special topic"
 );
+const _: () = assert!(
+    ZH_MIN_SOURCES >= 3,
+    "one or two outlets are not convergence"
+);
+
+const fn min_sources(language: EditorialLanguage) -> usize {
+    match language {
+        EditorialLanguage::Zh => ZH_MIN_SOURCES,
+        _ => MIN_SOURCES,
+    }
+}
 
 /// A story breaking on Friday should still be able to gather a gaggle by
 /// Sunday, when fewer outlets publish.

@@ -99,6 +99,193 @@ pub const SOURCES: &[SeedSource] = &[
         poll_interval_s: 900,
         beat: Some(Beat::Culture),
     },
+    // The section feeds above answer what Google classifies as a desk. These
+    // search lanes answer a different question: what Chinese readers are
+    // arguing about *right now*. They intentionally overlap. An item still
+    // deduplicates by canonical URL, while repetition across named publishers
+    // becomes an attention signal rather than another copy of the article.
+    SeedSource {
+        slug: "gnews-zh-top",
+        name: "Google 新闻 · 中文头条",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss?hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        homepage: "https://news.google.com",
+        trust: 70,
+        poll_interval_s: 120,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "gnews-zh-society",
+        name: "Google 新闻 · 社会与民生",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss/search?q=%E7%A4%BE%E4%BC%9A%E7%83%AD%E7%82%B9+OR+%E6%B0%91%E7%94%9F+OR+%E7%83%AD%E8%AE%AE+OR+%E8%88%86%E6%83%85+when%3A2d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        homepage: "https://news.google.com",
+        trust: 68,
+        poll_interval_s: 120,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "gnews-zh-controversy",
+        name: "Google 新闻 · 争议与后续",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss/search?q=%E4%BA%89%E8%AE%AE+OR+%E7%B4%A2%E8%B5%94+OR+%E5%88%A4%E5%86%B3+OR+%E8%B0%83%E8%A7%A3+OR+%E9%80%9A%E6%8A%A5+OR+%E5%90%8E%E7%BB%AD+when%3A2d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        homepage: "https://news.google.com",
+        trust: 68,
+        poll_interval_s: 120,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "gnews-zh-commentators",
+        name: "Google 新闻 · 舆论线索",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss/search?q=%E8%83%A1%E9%94%A1%E8%BF%9B+OR+%E8%80%81%E8%83%A1+OR+%E5%A4%A7V%E7%82%B9%E8%AF%84+when%3A2d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        homepage: "https://news.google.com",
+        trust: 52,
+        poll_interval_s: 180,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "gnews-zh-global-media",
+        name: "Google 新闻 · BBC/CNN/MSN/雅虎",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss/search?q=%28site%3Amsn.cn+OR+site%3Abbc.com%2Fzhongwen+OR+site%3Atw.news.yahoo.com+OR+site%3Acnn.com%29+when%3A2d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        homepage: "https://news.google.com",
+        trust: 66,
+        poll_interval_s: 300,
+        beat: Some(Beat::World),
+    },
+    // A scheduler handle for dynamically generated permanent-topic searches.
+    // Scout clones this source and replaces its URL per dossier; keeping it
+    // separate prevents a topic response's ETag from contaminating the main
+    // Chinese headline feed's conditional request state.
+    SeedSource {
+        slug: "gnews-zh-topics",
+        name: "Google 新闻 · 维园网专题搜索",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss/search?q=%E7%BB%B4%E5%9B%AD%E7%BD%91%E4%B8%93%E9%A2%98+when%3A1d&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        homepage: "https://news.google.com",
+        trust: 68,
+        poll_interval_s: 3600,
+        beat: Some(Beat::World),
+    },
+    // Per-edition scheduler handles. Scout substitutes each edition's own
+    // topic terms and locale, so these produce native reporting rather than
+    // translations of the Simplified Chinese feed.
+    SeedSource {
+        slug: "gnews-zh-hant-topics",
+        name: "Google 新聞 · 維園網專題搜尋",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss/search?q=%E7%B6%AD%E5%9C%92%E7%B6%B2%E5%B0%88%E9%A1%8C+when%3A1d&hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
+        homepage: "https://news.google.com",
+        trust: 68,
+        poll_interval_s: 3600,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "gnews-en-topics",
+        name: "Google News · VictoriaPark topic search",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss/search?q=VictoriaPark+topic+when%3A1d&hl=en-US&gl=US&ceid=US:en",
+        homepage: "https://news.google.com",
+        trust: 68,
+        poll_interval_s: 3600,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "gnews-ja-topics",
+        name: "Google ニュース · VictoriaPark 特集検索",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss/search?q=VictoriaPark+%E7%89%B9%E9%9B%86+when%3A1d&hl=ja&gl=JP&ceid=JP:ja",
+        homepage: "https://news.google.com",
+        trust: 68,
+        poll_interval_s: 3600,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "gnews-ko-topics",
+        name: "Google 뉴스 · VictoriaPark 기획 검색",
+        kind: SourceKind::Rss,
+        url: "https://news.google.com/rss/search?q=VictoriaPark+%EA%B8%B0%ED%9A%8D+when%3A1d&hl=ko&gl=KR&ceid=KR:ko",
+        homepage: "https://news.google.com",
+        trust: 68,
+        poll_interval_s: 3600,
+        beat: Some(Beat::World),
+    },
+    // Publisher-maintained Chinese RSS. Unlike search results, these carry a
+    // stable publisher identity and give the clustering layer genuinely
+    // independent corroboration. The social and rolling lanes are deliberately
+    // frequent: local public-interest stories often surface there hours before
+    // a national front page picks them up.
+    SeedSource {
+        slug: "chinanews-scroll-zh",
+        name: "中国新闻网 · 即时新闻",
+        kind: SourceKind::Rss,
+        url: "https://www.chinanews.com.cn/rss/scroll-news.xml",
+        homepage: "https://www.chinanews.com.cn/",
+        trust: 78,
+        poll_interval_s: 180,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "chinanews-society-zh",
+        name: "中国新闻网 · 社会",
+        kind: SourceKind::Rss,
+        url: "https://www.chinanews.com.cn/rss/society.xml",
+        homepage: "https://www.chinanews.com.cn/society/",
+        trust: 78,
+        poll_interval_s: 180,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "chinanews-world-zh",
+        name: "中国新闻网 · 国际",
+        kind: SourceKind::Rss,
+        url: "https://www.chinanews.com.cn/rss/world.xml",
+        homepage: "https://www.chinanews.com.cn/world/",
+        trust: 78,
+        poll_interval_s: 300,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "sina-society-zh",
+        name: "新浪新闻 · 社会焦点",
+        kind: SourceKind::Rss,
+        url: "https://rss.sina.com.cn/news/society/focus15.xml",
+        homepage: "https://news.sina.com.cn/society/",
+        trust: 68,
+        poll_interval_s: 180,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "sina-china-zh",
+        name: "新浪新闻 · 国内焦点",
+        kind: SourceKind::Rss,
+        url: "https://rss.sina.com.cn/news/china/focus15.xml",
+        homepage: "https://news.sina.com.cn/china/",
+        trust: 68,
+        poll_interval_s: 180,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "sina-world-zh",
+        name: "新浪新闻 · 国际焦点",
+        kind: SourceKind::Rss,
+        url: "https://rss.sina.com.cn/news/world/focus15.xml",
+        homepage: "https://news.sina.com.cn/world/",
+        trust: 68,
+        poll_interval_s: 300,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "bbc-zh",
+        name: "BBC News 中文",
+        kind: SourceKind::Rss,
+        url: "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml",
+        homepage: "https://www.bbc.com/zhongwen/simp",
+        trust: 84,
+        poll_interval_s: 600,
+        beat: Some(Beat::World),
+    },
     SeedSource {
         slug: "voa-zh-news",
         name: "美国之音中文网",
@@ -1049,6 +1236,14 @@ pub async fn seed_sources(db: &Db) -> Result<usize> {
             s.beat,
         )
         .await?;
+        // Google News publishes headline/link/timestamp RSS but disallows all
+        // paths in robots.txt. The exception is deliberately confined to its
+        // index feeds. We never treat Google as permission to fetch a linked
+        // publisher: article extraction checks that destination separately,
+        // and Google redirectors are excluded from extraction altogether.
+        if s.slug.starts_with("gnews") {
+            sources::set_robots_override(db, s.slug, true).await?;
+        }
     }
     Ok(SOURCES.len())
 }
