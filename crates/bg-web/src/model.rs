@@ -50,7 +50,10 @@ pub struct FrontPage {
     pub desk: Vec<StoryCard>,
     pub wire: Vec<StoryCard>,
     pub prices: Vec<Tick>,
-    /// Live special topics, hottest first. Usually empty — that is the point.
+    /// Permanent people, conflict and policy watches with enough published
+    /// reporting to be useful. Kept separate from the transient heat ranking.
+    pub tracked: Vec<GaggleCard>,
+    /// Transient live special topics, hottest first.
     pub gaggles: Vec<GaggleCard>,
     /// Current edition's strongest live headlines, ranked independently from
     /// page layout so readers can scan momentum at a glance.

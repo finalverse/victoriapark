@@ -381,8 +381,79 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                         <span>"面向中国大陆、香港、澳门以外的海外华语读者；不作上述地区的本地化或定向分发。与中国有关的全球新闻仍按证据和公共价值报道。"</span>
                     </section>
                 })}
+                {(!fp.tracked.is_empty())
+                    .then(|| {
+                        let watches = fp.tracked.clone();
+                        view! {
+                            <section class="watch-board shell" aria-label="Permanent newsroom watches">
+                                <header class="watch-board-head">
+                                    <div>
+                                        <span>{match language {
+                                            "zh" => "维园网 WATCH DESK",
+                                            "zh-hant" => "維園網 WATCH DESK",
+                                            "ja" => "VICTORIAPARK WATCH DESK",
+                                            "ko" => "VICTORIAPARK WATCH DESK",
+                                            _ => "VICTORIAPARK WATCH DESK",
+                                        }}</span>
+                                        <h2>{match language {
+                                            "zh" => "热点人物与战争 · 长期追踪",
+                                            "zh-hant" => "焦點人物與戰爭 · 長期追蹤",
+                                            "ja" => "人物・紛争 継続ウォッチ",
+                                            "ko" => "인물·분쟁 상시 추적",
+                                            _ => "People, power and conflict — permanent watches",
+                                        }}</h2>
+                                    </div>
+                                    <p>{match language {
+                                        "zh" => "每 20 分钟重新搜索；至少 5 篇报道后才进入首页。",
+                                        "zh-hant" => "每 20 分鐘重新搜尋；至少 5 篇報道後才進入首頁。",
+                                        "ja" => "20分ごとに再検索し、5本以上の記事が揃ってから掲載します。",
+                                        "ko" => "20분마다 재검색하며 기사 5건 이상일 때만 공개합니다.",
+                                        _ => "Researched every 20 minutes; shown only after five published reports.",
+                                    }}</p>
+                                </header>
+                                <div class="watch-grid">
+                                    {watches.into_iter().map(|g| {
+                                        let kind = if matches!(g.slug.as_str(), "donald-trump" | "elon-musk" | "jensen-huang") {
+                                            "watch-card watch-person"
+                                        } else {
+                                            "watch-card watch-conflict"
+                                        };
+                                        view! {
+                                            <a class=kind href=format!(
+                                                "{}/gaggle/{}",
+                                                language_prefix(language),
+                                                g.slug,
+                                            )>
+                                                <div class="watch-card-top">
+                                                    <span class="hot-pulse"></span>
+                                                    <b>{live_label(language)}</b>
+                                                    <em>{match language {
+                                                        "zh" => format!("{} 篇 · {} 源", g.stories, g.sources),
+                                                        "zh-hant" => format!("{} 篇 · {} 源", g.stories, g.sources),
+                                                        "ja" => format!("{} 本 · {} 情報源", g.stories, g.sources),
+                                                        "ko" => format!("기사 {} · 출처 {}", g.stories, g.sources),
+                                                        _ => format!("{} reports · {} sources", g.stories, g.sources),
+                                                    }}</em>
+                                                </div>
+                                                <h3>{g.title}</h3>
+                                                <p>{g.standfirst}</p>
+                                                <span class="watch-card-cta">{match language {
+                                                    "zh" => "进入追踪档案 →",
+                                                    "zh-hant" => "進入追蹤檔案 →",
+                                                    "ja" => "追跡ファイルへ →",
+                                                    "ko" => "추적 파일 보기 →",
+                                                    _ => "Open the live dossier →",
+                                                }}</span>
+                                            </a>
+                                        }
+                                    }).collect_view()}
+                                </div>
+                            </section>
+                        }
+                    })}
                 // Special topics are the front-page radar: persistent watches
-                // and fast-rising subjects belong above any individual story.
+                // Fast-rising subjects belong above any individual story;
+                // durable watches have their own newsroom board above.
                 {(!fp.gaggles.is_empty())
                     .then(|| {
                         let gs = fp.gaggles.clone();

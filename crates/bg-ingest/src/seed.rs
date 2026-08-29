@@ -208,6 +208,30 @@ pub const SOURCES: &[SeedSource] = &[
         poll_interval_s: 300,
         beat: Some(Beat::World),
     },
+    // Direct front-page crawls complement the Google News search lanes. They
+    // preserve the publisher URL as the source of record, while extraction
+    // and model use remain separately gated by robots.txt. These are indexes,
+    // not permission to republish an article verbatim.
+    SeedSource {
+        slug: "creaders-live-zh",
+        name: "万维读者网 · 美国新闻直采",
+        kind: SourceKind::Html,
+        url: "https://www.creaders.net/news/us/news_list.php?pid=18",
+        homepage: "https://www.creaders.net/",
+        trust: 56,
+        poll_interval_s: 300,
+        beat: Some(Beat::World),
+    },
+    SeedSource {
+        slug: "wenxuecity-live-zh",
+        name: "文学城 · 新闻首页直采",
+        kind: SourceKind::Html,
+        url: "https://www.wenxuecity.com/news/",
+        homepage: "https://www.wenxuecity.com/",
+        trust: 56,
+        poll_interval_s: 300,
+        beat: Some(Beat::World),
+    },
     // A scheduler handle for dynamically generated permanent-topic searches.
     // Scout clones this source and replaces its URL per dossier; keeping it
     // separate prevents a topic response's ETag from contaminating the main

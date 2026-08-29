@@ -313,6 +313,9 @@ async fn main() -> Result<()> {
                             r.summary(),
                             started.elapsed().as_secs()
                         );
+                        for error in &r.errors {
+                            eprintln!("    pipeline error: {error}");
+                        }
                         consecutive_failures = 0;
                         // Did this pass leave work on the table?
                         r.items_triaged > 0 || r.enriched > 0 || r.analysed > 0

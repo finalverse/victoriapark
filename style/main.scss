@@ -1610,6 +1610,87 @@ a:hover > .media-play::after,
 /* ---------------------------------------------------------------------------
    Gaggles — the front-page heat radar
    --------------------------------------------------------------------------- */
+.watch-board {
+  margin-top: 1.25rem;
+  margin-bottom: 1.8rem;
+}
+
+.watch-board-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1rem 0 .8rem;
+  border-top: 4px solid var(--ink);
+
+  > div > span {
+    color: var(--accent);
+    font: 800 .62rem/1 var(--mono);
+    letter-spacing: .17em;
+  }
+
+  h2 { margin: .35rem 0 0; font-size: clamp(1.45rem, 2.6vw, 2.25rem); }
+  p { max-width: 28rem; margin: 0; color: var(--muted); font: .72rem/1.55 var(--mono); text-align: right; }
+}
+
+.watch-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .8rem;
+}
+
+.watch-card {
+  position: relative;
+  display: flex;
+  min-height: 13.2rem;
+  overflow: hidden;
+  flex-direction: column;
+  padding: 1.05rem;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--r) + 5px);
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--paper) 94%, var(--gold-dim)), var(--paper));
+  box-shadow: 0 12px 35px rgb(16 35 30 / 6%);
+  text-decoration: none;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+
+  &::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: linear-gradient(var(--gold), #ef6c54);
+    content: "";
+  }
+
+  &.watch-conflict::before { background: linear-gradient(#ef6c54, #8d2b31); }
+  &:hover { transform: translateY(-3px); border-color: var(--gold-line); box-shadow: 0 18px 42px rgb(16 35 30 / 11%); }
+  h3 { margin: .9rem 0 .5rem; font-size: clamp(1.1rem, 1.7vw, 1.42rem); line-height: 1.18; }
+  > p {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    margin: 0 0 auto;
+    color: var(--muted);
+    font-size: .8rem;
+    line-height: 1.55;
+  }
+}
+
+.watch-card-top {
+  display: flex;
+  align-items: center;
+  gap: .42rem;
+  color: var(--accent);
+  font: .6rem/1 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+
+  em { margin-left: auto; color: var(--muted); font-style: normal; letter-spacing: 0; text-transform: none; }
+}
+
+.watch-card-cta { margin-top: .85rem; color: var(--accent); font: 700 .68rem/1 var(--mono); }
+
 .gaggle-band {
   margin: 0 0 1.75rem;
   border-top: 1px solid var(--gold-line);
@@ -1746,10 +1827,15 @@ a:hover > .media-play::after,
 }
 
 @media (width <= 900px) {
+  .watch-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .topic-radar-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (width <= 600px) {
+  .watch-board-head { align-items: start; flex-direction: column; gap: .45rem; }
+  .watch-board-head p { text-align: left; }
+  .watch-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: .35rem; }
+  .watch-card { flex: 0 0 84vw; scroll-snap-align: start; }
   .topic-radar-grid {
     display: flex;
     overflow-x: auto;

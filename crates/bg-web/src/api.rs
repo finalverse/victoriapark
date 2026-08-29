@@ -305,7 +305,7 @@ pub async fn get_front_page(
     // Live only — a topic nobody has written about for two days is an archive
     // page, not a special topic, and offering it as one is how a news site ends
     // up looking abandoned.
-    let gaggles: Vec<GaggleCard> = bg_db::gaggles::live_for_language(db, language, 48, 10)
+    let topic_cards: Vec<GaggleCard> = bg_db::gaggles::live_for_language(db, language, 48, 24)
         .await
         .unwrap_or_default()
         .into_iter()
@@ -332,11 +332,23 @@ pub async fn get_front_page(
                 .unwrap_or_default(),
         })
         .collect();
+    let tracked: Vec<GaggleCard> = topic_cards
+        .iter()
+        .filter(|g| g.pinned)
+        .take(8)
+        .cloned()
+        .collect();
+    let gaggles: Vec<GaggleCard> = topic_cards
+        .into_iter()
+        .filter(|g| !g.pinned)
+        .take(10)
+        .collect();
 
     Ok(FrontPage {
         lead,
         desk,
         wire,
+        tracked,
         gaggles,
         hotline,
         prices,
