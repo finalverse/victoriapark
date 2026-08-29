@@ -20,6 +20,21 @@ pub struct ScoutReport {
     pub items_new: usize,
     pub not_modified: usize,
     pub topics_searched: usize,
+    pub directions_searched: usize,
+}
+
+fn discovery_locale(
+    language: bg_core::domain::EditorialLanguage,
+) -> (&'static str, &'static str, &'static str, &'static str) {
+    match language {
+        bg_core::domain::EditorialLanguage::Zh => ("gnews-zh-topics", "zh-CN", "CN", "CN:zh-Hans"),
+        bg_core::domain::EditorialLanguage::ZhHant => {
+            ("gnews-zh-hant-topics", "zh-TW", "TW", "TW:zh-Hant")
+        }
+        bg_core::domain::EditorialLanguage::Ja => ("gnews-ja-topics", "ja", "JP", "JP:ja"),
+        bg_core::domain::EditorialLanguage::Ko => ("gnews-ko-topics", "ko", "KR", "KR:ko"),
+        bg_core::domain::EditorialLanguage::En => ("gnews-en-topics", "en-US", "US", "US:en"),
+    }
 }
 
 fn topic_search_query(anchor_terms: &[String], keywords: &[String]) -> Option<String> {
@@ -139,23 +154,7 @@ pub async fn run(ctx: &Ctx) -> Result<ScoutReport> {
             .await
             .unwrap_or_default();
         for topic in due {
-            let (source_slug, hl, gl, ceid) = match topic.editorial_language {
-                bg_core::domain::EditorialLanguage::Zh => {
-                    ("gnews-zh-topics", "zh-CN", "CN", "CN:zh-Hans")
-                }
-                bg_core::domain::EditorialLanguage::ZhHant => {
-                    ("gnews-zh-hant-topics", "zh-TW", "TW", "TW:zh-Hant")
-                }
-                bg_core::domain::EditorialLanguage::Ja => {
-                    ("gnews-ja-topics", "ja", "JP", "JP:ja")
-                }
-                bg_core::domain::EditorialLanguage::Ko => {
-                    ("gnews-ko-topics", "ko", "KR", "KR:ko")
-                }
-                bg_core::domain::EditorialLanguage::En => {
-                    ("gnews-en-topics", "en-US", "US", "US:en")
-                }
-            };
+            let (source_slug, hl, gl, ceid) = discovery_locale(topic.editorial_language);
             if let Ok(base) = bg_db::sources::by_slug(&ctx.db, source_slug).await {
                 let Some(query) = topic_search_query(&topic.anchor_terms, &topic.keywords) else {
                     let _ = bg_db::gaggles::mark_searched(&ctx.db, topic.id).await;
@@ -185,19 +184,67 @@ pub async fn run(ctx: &Ctx) -> Result<ScoutReport> {
             let _ = bg_db::gaggles::mark_searched(&ctx.db, topic.id).await;
         }
 
+        // Human editors steer discovery through the same intake path. A
+        // direction can make Scout look harder in one language and desk, but
+        // it cannot publish, set a score or bypass any autonomous review.
+        let directions = bg_db::directions::searches_due(&ctx.db, 20, 4)
+            .await
+            .unwrap_or_default();
+        for direction in directions {
+            let (source_slug, hl, gl, ceid) = discovery_locale(direction.editorial_language);
+            if let Ok(base) = bg_db::sources::by_slug(&ctx.db, source_slug).await {
+                if let Some(query) =
+                    topic_search_query(&direction.anchor_terms, &direction.keywords)
+                {
+                    let mut search = base.clone();
+                    search.beat = Some(direction.beat);
+                    if let Ok(mut url) = reqwest::Url::parse("https://news.google.com/rss/search")
+                    {
+                        url.query_pairs_mut()
+                            .append_pair("q", &query)
+                            .append_pair("hl", hl)
+                            .append_pair("gl", gl)
+                            .append_pair("ceid", ceid);
+                        search.url = url.to_string();
+                        search.etag = None;
+                        search.last_modified = None;
+                        let report =
+                            bg_ingest::feeds::poll_source(&ctx.db, &ctx.http, &search).await;
+                        r.items_new += report.inserted;
+                        if report.error.is_some() {
+                            r.sources_failed += 1;
+                        } else {
+                            r.sources_polled += 1;
+                        }
+                        r.directions_searched += 1;
+                        info!(
+                            direction = %direction.title,
+                            language = %direction.editorial_language,
+                            beat = %direction.beat,
+                            inserted = report.inserted,
+                            "human editorial direction swept"
+                        );
+                    }
+                }
+            }
+            let _ = bg_db::directions::mark_searched(&ctx.db, direction.id).await;
+        }
+
         info!(
             polled = r.sources_polled,
             failed = r.sources_failed,
             new = r.items_new,
             not_modified = r.not_modified,
             topics = r.topics_searched,
+            directions = r.directions_searched,
             "scout swept"
         );
         let note = format!(
-            "{} new items from {} sources; {} topic searches ({} unchanged, {} failed)",
+            "{} new items from {} sources; {} topic and {} editor-directed searches ({} unchanged, {} failed)",
             r.items_new,
             r.sources_polled,
             r.topics_searched,
+            r.directions_searched,
             r.not_modified,
             r.sources_failed
         );

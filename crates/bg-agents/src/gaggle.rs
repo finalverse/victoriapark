@@ -264,9 +264,16 @@ async fn run_language(ctx: &Ctx, max_new: usize, language: EditorialLanguage) ->
             continue;
         }
         let stories = bg_db::gaggles::stories_for_topic(&ctx.db, &heat.topic, language, 60).await?;
-        if stories.is_empty() {
-            // Hot across the wires but nothing published yet. It will still be
-            // hot next pass, by which point the pipeline may have caught up.
+        if stories.len() < bg_db::gaggles::HOT_TOPIC_MIN_STORIES as usize {
+            // Heat alone is not a reader product. Keep reporting and let the
+            // candidate return next pass; only five published stories earn a
+            // special-topic promotion.
+            info!(
+                topic = %heat.topic,
+                stories = stories.len(),
+                required = bg_db::gaggles::HOT_TOPIC_MIN_STORIES,
+                "hot-topic candidate is still gathering coverage"
+            );
             continue;
         }
 

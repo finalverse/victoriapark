@@ -52,6 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Explicit API routes are registered ahead of the site's catch-all, so
         // `/v1/...` can never be swallowed by client-side routing.
         .merge(bg_api::router(db.clone()))
+        // Password-gated human direction desk. This only influences discovery;
+        // it never exposes a route that can force publication.
+        .merge(bg_web::editor::router(db.clone()))
         // Generated share cards. Registered before the site's catch-all so
         // `/og/...` reaches the renderer rather than client-side routing.
         .merge(bg_web::ogroute::router(db.clone()))
