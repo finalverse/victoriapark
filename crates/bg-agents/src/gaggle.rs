@@ -323,7 +323,7 @@ async fn run_language(ctx: &Ctx, max_new: usize, language: EditorialLanguage) ->
                 // Local reasoning models may spend part of this allowance on
                 // deliberation before emitting the small JSON object. Six
                 // hundred truncated a live multilingual framing in production.
-                .with_max_tokens(1_000);
+                .with_max_tokens(1_600);
             let (framing, completion) = ctx.llm.complete_json::<Framing>(&req).await?;
 
             let title = framing.title.trim();
