@@ -51,10 +51,22 @@ fn topic_search_query(anchor_terms: &[String], keywords: &[String]) -> Option<St
     };
     let anchors = normalize(anchor_terms, 4);
     let signals = normalize(keywords, 5);
+    // People-watch migrations deliberately repeat the subject's name in the
+    // signal list. That means the named identity is precise enough by itself:
+    // asking Google News for "Trump" plus one of a short list of policy words
+    // missed ordinary breaking-news headlines about Trump. Conflict and trade
+    // watches do not repeat their anchors, so they retain the safer two-group
+    // query below.
+    let identity_is_signal = anchors.iter().any(|anchor| {
+        keywords
+            .iter()
+            .any(|signal| anchor.eq_ignore_ascii_case(signal.trim()))
+    });
     match (anchors.is_empty(), signals.is_empty()) {
         (true, true) => None,
         (false, true) => Some(format!("({}) when:2d", anchors.join(" OR "))),
         (true, false) => Some(format!("({}) when:2d", signals.join(" OR "))),
+        (false, false) if identity_is_signal => Some(format!("({}) when:2d", anchors.join(" OR "))),
         (false, false) => Some(format!(
             "({}) ({}) when:2d",
             anchors.join(" OR "),
@@ -291,5 +303,15 @@ mod tests {
     fn topic_search_uses_available_group_when_one_is_missing() {
         let query = topic_search_query(&["  ".into()], &["headline".into()]).unwrap();
         assert_eq!(query, "(headline) when:2d");
+    }
+
+    #[test]
+    fn a_named_person_does_not_require_a_second_sector_term() {
+        let query = topic_search_query(
+            &["特朗普".into(), "Donald Trump".into()],
+            &["白宫".into(), "特朗普".into()],
+        )
+        .unwrap();
+        assert_eq!(query, "(Donald Trump OR 特朗普) when:2d");
     }
 }
