@@ -113,7 +113,11 @@ impl Default for RunOpts {
             prices: true,
             ombuds: true,
             max_triage: 100,
-            max_cluster: 60,
+            // Clustering is mostly deterministic, and publication cannot see
+            // anything still waiting here. Matching triage capacity prevents
+            // this stage from becoming a permanent choke point; operators can
+            // tune it down on a slower provider without a rebuild.
+            max_cluster: env_i64("BG_MAX_CLUSTER", 100),
             news_horizon_hours: 72,
             // Enrichment is a plain page fetch, not a model call — it is what
             // gives an aggregator's headline-and-link enough text for the

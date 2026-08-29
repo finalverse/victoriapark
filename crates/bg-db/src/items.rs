@@ -246,9 +246,33 @@ pub async fn mark_triaged(
 /// Triaged items not yet attached to a story — the clustering input.
 pub async fn unclustered(db: &Db, limit: i64) -> Result<Vec<RawItem>> {
     let rows = crate::sql(format!(
-        "SELECT {COLS} FROM raw_items
-         WHERE triaged AND story_id IS NULL AND aged_out_at IS NULL
-         ORDER BY published_at DESC LIMIT $1"
+        "WITH pending AS (
+             SELECT {COLS},
+                    row_number() OVER (
+                        PARTITION BY CASE
+                            WHEN lang LIKE 'zh-hant%' OR lang LIKE 'zh-tw%' THEN 'zh-hant'
+                            WHEN lang LIKE 'zh%' THEN 'zh'
+                            WHEN lang LIKE 'ja%' THEN 'ja'
+                            WHEN lang LIKE 'ko%' THEN 'ko'
+                            ELSE 'en'
+                        END
+                        ORDER BY published_at DESC
+                    ) AS language_turn,
+                    CASE
+                        WHEN lang LIKE 'zh%' AND lang NOT LIKE 'zh-hant%'
+                             AND lang NOT LIKE 'zh-tw%' THEN 0
+                        WHEN lang LIKE 'zh-hant%' OR lang LIKE 'zh-tw%' THEN 1
+                        WHEN lang LIKE 'en%' THEN 2
+                        WHEN lang LIKE 'ja%' THEN 3
+                        WHEN lang LIKE 'ko%' THEN 4
+                        ELSE 5
+                    END AS language_order
+               FROM raw_items
+              WHERE triaged AND story_id IS NULL AND aged_out_at IS NULL
+         )
+         SELECT {COLS} FROM pending
+          ORDER BY language_turn, language_order, published_at DESC
+          LIMIT $1"
     ))
     .bind(limit)
     .fetch_all(&db.pool)
