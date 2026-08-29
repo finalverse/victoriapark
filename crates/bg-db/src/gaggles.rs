@@ -409,7 +409,12 @@ pub async fn live_for_language(
                     )
                 )
             )
-          ORDER BY g.source_count
+          -- Permanent watches and transient topics are split by the caller,
+          -- so the shared limit must retain the watches first. Without this,
+          -- a busy news cycle could fill all 24 rows with transient clusters
+          -- before the UI ever had a chance to render its Watch Desk.
+          ORDER BY g.pinned DESC,
+                   g.source_count
                    * exp(-extract(epoch from (now() - g.last_hot_at)) / 43200.0)
                    DESC,
                    g.story_count DESC, g.last_hot_at DESC
