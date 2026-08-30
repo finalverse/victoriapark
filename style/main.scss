@@ -1944,6 +1944,13 @@ a:hover > .media-play::after,
 :root {
   --signal-coral: #ff6258;
   --signal-cyan: #3cc8be;
+  /* Compatibility aliases for the newer editorial modules. Keeping them
+     theme-derived prevents light mode from turning surfaces into ink. */
+  --ink: var(--paper);
+  --ink-2: var(--paper-dim);
+  --rule: var(--line);
+  --accent: var(--gold);
+  --signal-red: var(--signal-coral);
   --shadow-soft: 0 18px 48px rgba(0, 20, 16, .12);
   --glass: color-mix(in srgb, var(--ink-700) 82%, transparent);
   --r-xl: 18px;
@@ -2025,6 +2032,22 @@ body {
 .topic-index-grid { grid-template-columns: repeat(12, 1fr); }
 .topic-index-card { grid-column: span 4; border-radius: var(--r-xl); box-shadow: var(--shadow-soft); }
 .topic-index-card:first-child { grid-column: span 8; }
+
+/* The watch cards predate the light/dark token naming. Their surface must be
+   a surface token; `--paper` is the foreground colour in this design system. */
+.watch-card {
+  color: var(--paper);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--ink-700) 94%, var(--gold-dim)), var(--ink-700));
+}
+
+/* At laptop widths the edition picker and newsroom nav no longer fight for
+   the last few pixels. Desks remain on the primary row; newsroom utilities
+   become a deliberate second rail. */
+@media (761px <= width <= 1350px) {
+  .masthead .shell { height: auto; min-height: 62px; flex-wrap: wrap; padding-top: .5rem; padding-bottom: .45rem; }
+  .nav { order: 3; width: 100%; justify-content: center; padding-top: .35rem; border-top: 1px solid var(--line-soft); }
+  .masthead-right { margin-left: auto; }
+}
 
 @media (width <= 1000px) {
   .topic-radar-card, .topic-radar-card:first-child, .topic-radar-card:nth-child(n+5) { grid-column: span 6; grid-row: auto; min-height: 13rem; }
