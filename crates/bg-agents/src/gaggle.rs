@@ -414,6 +414,22 @@ fn valid_topic_framing(title: &str, standfirst: &str, language: EditorialLanguag
     };
     let title_len = title.chars().count();
     let standfirst_len = standfirst.chars().count();
+    const DIGEST_MARKERS: &[&str] = &[
+        "汇总",
+        "彙總",
+        "概览",
+        "概覽",
+        "热点回顾",
+        "熱點回顧",
+        "多领域",
+        "多領域",
+        "多起事件",
+        "动态更新",
+        "動態更新",
+        "news roundup",
+        "weekly roundup",
+    ];
+    let lower_title = title.to_lowercase();
     title_len >= 3
         && title_len <= title_cap
         && standfirst_len >= 30
@@ -421,6 +437,7 @@ fn valid_topic_framing(title: &str, standfirst: &str, language: EditorialLanguag
         && !title.contains(['\n', '\r'])
         && !standfirst.contains("###")
         && !title.starts_with('#')
+        && !DIGEST_MARKERS.iter().any(|m| lower_title.contains(m))
 }
 
 #[cfg(test)]
@@ -438,6 +455,11 @@ mod framing_tests {
         assert!(!valid_topic_framing(
             "第一篇新闻\n第二篇新闻\n### 分析",
             "这是一段足够长但标题显然是文章正文而不是专题名称的说明文字。",
+            EditorialLanguage::Zh,
+        ));
+        assert!(!valid_topic_framing(
+            "国际政局多领域动态更新与热点回顾",
+            "这一标题把互不相干的事件装进一个页面，因此不能成为一个事件级专题。",
             EditorialLanguage::Zh,
         ));
     }
