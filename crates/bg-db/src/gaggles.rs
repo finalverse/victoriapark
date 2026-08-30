@@ -430,7 +430,10 @@ fn topic_overlap(a: &HashSet<Uuid>, b: &HashSet<Uuid>) -> f32 {
         return 0.0;
     }
     let shared = a.intersection(b).count() as f32;
-    shared / a.union(b).count() as f32
+    // Containment coefficient, not Jaccard. A newly named 37-story Hormuz
+    // cluster can be wholly contained by the 200-story permanent dossier; its
+    // Jaccard score is small only because the dossier has a longer history.
+    shared / a.len().min(b.len()) as f32
 }
 
 #[cfg(test)]
@@ -446,7 +449,7 @@ mod overlap_tests {
         let b: HashSet<_> = ids[..6].iter().copied().collect();
         let c: HashSet<_> = ids[5..].iter().copied().collect();
         assert_eq!(topic_overlap(&a, &b), 1.0);
-        assert!(topic_overlap(&a, &c) < 0.25);
+        assert!(topic_overlap(&a, &c) < 0.35);
     }
 }
 

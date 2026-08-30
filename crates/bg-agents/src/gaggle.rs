@@ -357,6 +357,17 @@ async fn run_language(ctx: &Ctx, max_new: usize, language: EditorialLanguage) ->
                     "the model declined to frame this topic ({title:?}); not opening a gaggle"
                 )));
             }
+            if !valid_topic_framing(title, standfirst, language) {
+                let why = "framing was article-shaped rather than a concise event topic";
+                let _ = bg_db::declines::note(
+                    &ctx.db,
+                    bg_db::declines::GAGGLE_FRAMING,
+                    &heat.topic,
+                    why,
+                )
+                .await;
+                return Err(FlockError::Other(why.into()));
+            }
 
             let id = bg_db::gaggles::upsert(
                 &ctx.db,
@@ -383,6 +394,44 @@ async fn run_language(ctx: &Ctx, max_new: usize, language: EditorialLanguage) ->
         opened += n;
     }
     Ok(opened)
+}
+
+fn valid_topic_framing(title: &str, standfirst: &str, language: EditorialLanguage) -> bool {
+    let title_cap = match language {
+        EditorialLanguage::Zh | EditorialLanguage::ZhHant => 48,
+        EditorialLanguage::Ja => 56,
+        EditorialLanguage::Ko => 72,
+        EditorialLanguage::En => 100,
+    };
+    let title_len = title.chars().count();
+    let standfirst_len = standfirst.chars().count();
+    title_len >= 3
+        && title_len <= title_cap
+        && standfirst_len >= 30
+        && standfirst_len <= 700
+        && !title.contains(['\n', '\r'])
+        && !standfirst.contains("###")
+        && !title.starts_with('#')
+}
+
+#[cfg(test)]
+mod framing_tests {
+    use super::valid_topic_framing;
+    use bg_core::domain::EditorialLanguage;
+
+    #[test]
+    fn article_dumps_cannot_become_topic_names() {
+        assert!(valid_topic_framing(
+            "美伊与霍尔木兹海峡危机",
+            "持续追踪军事行动、航运、能源市场与外交信号，并把事实和分析明确分开。",
+            EditorialLanguage::Zh,
+        ));
+        assert!(!valid_topic_framing(
+            "第一篇新闻\n第二篇新闻\n### 分析",
+            "这是一段足够长但标题显然是文章正文而不是专题名称的说明文字。",
+            EditorialLanguage::Zh,
+        ));
+    }
 }
 
 /// Re-synthesise long-running topic briefs from VictoriaPark's published work.
