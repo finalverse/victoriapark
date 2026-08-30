@@ -22,7 +22,7 @@ use crate::{stage, Ctx, FlockError, Result, StageOutput};
 use bg_core::domain::{AgentRole, EditorialLanguage, ModelTier};
 use bg_llm::{schema as sch, Request};
 use serde::Deserialize;
-use tracing::info;
+use tracing::{info, warn};
 
 /// Independent outlets required before a subject earns a page of its own.
 ///
@@ -184,7 +184,16 @@ async fn refresh_language(ctx: &Ctx, language: EditorialLanguage) -> Result<usiz
 ///
 /// Returns how many were opened or refreshed.
 pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
-    let briefed = refresh_tracked_briefs(ctx, max_new.min(1)).await?;
+    // A periodic prose refresh is optional; mechanical story membership and
+    // duplicate-event consolidation are not. A truncated model response must
+    // not prevent the free deterministic maintenance that follows.
+    let briefed = match refresh_tracked_briefs(ctx, max_new.min(1)).await {
+        Ok(n) => n,
+        Err(error) => {
+            warn!(%error, "tracked brief refresh failed; continuing topic maintenance");
+            0
+        }
+    };
     let mut total = briefed;
     for language in editions() {
         total += run_language(ctx, max_new, language).await?;
