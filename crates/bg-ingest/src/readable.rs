@@ -86,6 +86,12 @@ pub struct Extracted {
     /// using it for its purpose. It costs nothing extra — we already have the
     /// page open for the text.
     pub image: Option<String>,
+    /// An original publisher link disclosed by an aggregator or community
+    /// repost. This is metadata only: it lets the newsroom show the chain
+    /// "community signal -> original publisher" and never licenses copying.
+    pub origin_url: Option<String>,
+    /// Publisher label printed next to the disclosed original link.
+    pub origin_name: Option<String>,
 }
 
 /// Fetch `url` and extract its article text.
@@ -121,8 +127,56 @@ pub async fn fetch(
     let body = resp.text().await?;
     Ok(extract(&body).map(|mut e| {
         e.image = lead_image(&body, url);
+        let (origin_url, origin_name) = source_reference(&body, url);
+        e.origin_url = origin_url;
+        e.origin_name = origin_name;
         e
     }))
+}
+
+/// Find an explicitly disclosed original-source link on an article page.
+///
+/// Community sites often wrap a report but retain a small “文章来源/来源/原文”
+/// line. We only accept an external HTTP(S) link whose nearby text contains
+/// that disclosure language. This deliberately rejects generic related-story,
+/// advertising and navigation links.
+pub fn source_reference(html: &str, page_url: &str) -> (Option<String>, Option<String>) {
+    let Ok(page) = url::Url::parse(page_url) else {
+        return (None, None);
+    };
+    let page_host = page.host_str().unwrap_or_default();
+    let doc = Html::parse_document(html);
+    let Ok(links) = Selector::parse("a[href]") else {
+        return (None, None);
+    };
+    const MARKERS: &[&str] = &["文章来源", "原文", "来源", "原始报道", "source", "original"];
+    for link in doc.select(&links) {
+        let href = link.value().attr("href").unwrap_or("").trim();
+        let Ok(abs) = page.join(href) else { continue };
+        if !matches!(abs.scheme(), "http" | "https")
+            || abs.host_str().unwrap_or_default() == page_host
+        {
+            continue;
+        }
+        let own = collapse_ws(&link.text().collect::<String>());
+        let nearby = link
+            .parent()
+            .and_then(scraper::ElementRef::wrap)
+            .map(|p| collapse_ws(&p.text().collect::<String>()))
+            .unwrap_or_else(|| own.clone());
+        let lower = nearby.to_lowercase();
+        if !MARKERS.iter().any(|m| lower.contains(&m.to_lowercase())) {
+            continue;
+        }
+        let name = own
+            .trim_matches(|c: char| c.is_whitespace() || "：:｜|-[]（）()".contains(c))
+            .trim();
+        return (
+            Some(abs.to_string()),
+            (!name.is_empty()).then(|| name.to_string()),
+        );
+    }
+    (None, None)
 }
 
 /// The publisher's own share image for this page.
@@ -174,6 +228,8 @@ pub fn extract(html: &str) -> Option<Extracted> {
                 text: cap(text),
                 via: "json-ld",
                 image: None,
+                origin_url: None,
+                origin_name: None,
             });
         }
     }
@@ -191,6 +247,8 @@ pub fn extract(html: &str) -> Option<Extracted> {
                 text: cap(text),
                 via: sel,
                 image: None,
+                origin_url: None,
+                origin_name: None,
             });
         }
     }
@@ -202,6 +260,8 @@ pub fn extract(html: &str) -> Option<Extracted> {
         text: cap(text),
         via: "all-paragraphs",
         image: None,
+        origin_url: None,
+        origin_name: None,
     })
 }
 
@@ -400,6 +460,17 @@ mod tests {
             1,
             "duplicate paragraph stored twice"
         );
+    }
+
+    #[test]
+    fn source_trace_accepts_disclosed_origin_and_rejects_related_links() {
+        let html = r#"<article>
+          <p><a href="https://ads.example/banner">Recommended</a></p>
+          <p>文章来源：<a href="https://apnews.com/article/real">Associated Press</a></p>
+        </article>"#;
+        let (url, name) = source_reference(html, "https://www.wenxuecity.com/news/1.html");
+        assert_eq!(url.as_deref(), Some("https://apnews.com/article/real"));
+        assert_eq!(name.as_deref(), Some("Associated Press"));
     }
 }
 

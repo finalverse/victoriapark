@@ -1937,6 +1937,114 @@ a:hover > .media-play::after,
   .topic-rail { position: static; }
 }
 
+/* ==========================================================================
+   2026 editorial intelligence facelift
+   ========================================================================== */
+
+:root {
+  --signal-coral: #ff6258;
+  --signal-cyan: #3cc8be;
+  --shadow-soft: 0 18px 48px rgba(0, 20, 16, .12);
+  --glass: color-mix(in srgb, var(--ink-700) 82%, transparent);
+  --r-xl: 18px;
+}
+
+body {
+  background:
+    radial-gradient(58rem 32rem at 8% -8%, color-mix(in srgb, var(--signal-cyan) 10%, transparent), transparent 62%),
+    radial-gradient(54rem 28rem at 96% 2%, color-mix(in srgb, var(--gold) 12%, transparent), transparent 68%),
+    var(--ink-800);
+}
+
+.masthead {
+  background: color-mix(in srgb, var(--ink-800) 84%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--paper) 4%, transparent);
+  backdrop-filter: blur(18px) saturate(1.35);
+}
+.masthead .shell { max-width: 1540px; }
+.brand { padding-right: .35rem; }
+.brand-mark { filter: drop-shadow(0 5px 12px color-mix(in srgb, var(--gold) 24%, transparent)); }
+.desks { background: var(--glass); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--paper) 6%, transparent); }
+.nav a { font-weight: 650; }
+
+.gaggle-band {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--signal-cyan) 8%, transparent), transparent 38%),
+    radial-gradient(circle at 88% 0%, color-mix(in srgb, var(--signal-coral) 10%, transparent), transparent 30rem),
+    linear-gradient(180deg, var(--ink-900), var(--ink-800));
+}
+.gaggle-band::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .16;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(to bottom, #000, transparent 78%);
+}
+.topic-radar { position: relative; max-width: 1540px; }
+.topic-radar-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: .85rem; }
+.topic-radar-card {
+  grid-column: span 4; min-height: 13.5rem; border-radius: var(--r-xl);
+  padding: 1.15rem; background: var(--glass); box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(12px);
+}
+.topic-radar-card:first-child { grid-column: span 8; grid-row: span 2; min-height: 18rem; }
+.topic-radar-card:first-child h2 { font-size: clamp(1.7rem, 3vw, 2.75rem); max-width: 18ch; }
+.topic-radar-card:nth-child(n+5) { grid-column: span 3; min-height: 11.5rem; }
+.topic-rank { color: var(--gold); }
+.topic-heat { height: 4px; }
+.topic-heat span { box-shadow: 0 0 18px color-mix(in srgb, var(--signal-coral) 55%, transparent); }
+
+.community-signal { margin-top: 1rem; margin-bottom: 2rem; padding-top: 1.25rem; padding-bottom: 1.35rem; }
+.community-signal-head {
+  display: grid; grid-template-columns: 1fr 1.35fr auto; gap: 1.5rem; align-items: end;
+  padding: 1.25rem 1.35rem; border: 1px solid var(--line); border-radius: var(--r-xl) var(--r-xl) 0 0;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--signal-cyan) 12%, var(--ink-700)), var(--ink-700));
+}
+.community-signal-head span, .eyebrow { color: var(--signal-cyan); font: 750 .64rem/1 var(--mono); letter-spacing: .16em; }
+.community-signal-head h2 { margin-top: .45rem; font-size: 1.65rem; }
+.community-signal-head p { margin: 0; color: var(--muted); font-size: .82rem; }
+.community-signal-head a { color: var(--gold); font-size: .78rem; white-space: nowrap; }
+.community-signal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--r-xl) var(--r-xl); overflow: hidden; }
+.community-signal-grid .card { min-width: 0; padding: 1.1rem; background: var(--ink-700); border: 0; }
+.community-signal-grid .card::before { content: "社区线索 · 已进入 AI 采编"; display: block; color: var(--signal-cyan); font: 700 .62rem/1 var(--mono); letter-spacing: .08em; margin-bottom: .7rem; }
+
+.community-hero {
+  position: relative; overflow: hidden; padding: clamp(1.5rem, 5vw, 4rem); border: 1px solid var(--line);
+  border-radius: 24px; background: linear-gradient(135deg, color-mix(in srgb, var(--signal-cyan) 15%, var(--ink-700)), var(--ink-900)); box-shadow: var(--shadow-soft);
+}
+.community-hero::after { content: "SOURCE\A TRACE"; white-space: pre; position: absolute; right: 3%; bottom: -12%; color: color-mix(in srgb, var(--paper) 5%, transparent); font: 900 clamp(4rem, 12vw, 10rem)/.72 var(--sans); text-align: right; }
+.community-hero h1 { margin: .8rem 0; font-size: clamp(2.5rem, 7vw, 5.5rem); }
+.community-hero p { max-width: 48rem; color: var(--paper-dim); font-size: 1.05rem; }
+.community-flow { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; margin-top: 1.5rem; }
+.community-flow b { padding: .38rem .7rem; border: 1px solid var(--gold-line); border-radius: 999px; color: var(--gold); font-size: .72rem; }
+.community-flow i { color: var(--signal-coral); font-style: normal; }
+.community-proof { display: flex; justify-content: space-between; gap: 1rem; margin: 1rem 0; padding: .7rem 1rem; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font: .7rem/1.4 var(--mono); }
+.community-story-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 1.5rem; }
+
+.topic-index-grid { grid-template-columns: repeat(12, 1fr); }
+.topic-index-card { grid-column: span 4; border-radius: var(--r-xl); box-shadow: var(--shadow-soft); }
+.topic-index-card:first-child { grid-column: span 8; }
+
+@media (width <= 1000px) {
+  .topic-radar-card, .topic-radar-card:first-child, .topic-radar-card:nth-child(n+5) { grid-column: span 6; grid-row: auto; min-height: 13rem; }
+  .community-signal-head { grid-template-columns: 1fr auto; }
+  .community-signal-head p { grid-column: 1 / -1; grid-row: 2; }
+  .community-signal-grid { grid-template-columns: repeat(2, 1fr); }
+  .community-story-grid { grid-template-columns: repeat(2, 1fr); }
+  .topic-index-card, .topic-index-card:first-child { grid-column: span 6; }
+}
+@media (width <= 640px) {
+  .topic-radar-grid { display: flex; }
+  .topic-radar-card, .topic-radar-card:first-child, .topic-radar-card:nth-child(n+5) { flex: 0 0 86vw; min-height: 14rem; }
+  .community-signal-head { display: flex; flex-direction: column; align-items: flex-start; gap: .65rem; }
+  .community-signal-grid, .community-story-grid { grid-template-columns: 1fr; }
+  .community-proof { align-items: flex-start; flex-direction: column; border-radius: var(--r-lg); }
+  .community-flow i { display: none; }
+  .topic-index-grid { display: grid; grid-template-columns: 1fr; }
+  .topic-index-card, .topic-index-card:first-child { grid-column: 1; }
+}
+
 // The spending mandate on an agent tile.
 //
 // A cost figure is the newsroom reporting on itself. A mandate is a ceiling

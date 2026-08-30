@@ -24,6 +24,7 @@ pub mod agents;
 pub mod analyses;
 pub mod articles;
 pub mod claims;
+pub mod community;
 pub mod convert;
 pub mod declines;
 pub mod directions;

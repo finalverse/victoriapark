@@ -107,6 +107,28 @@ pub async fn enrich(ctx: &Ctx, limit: i64) -> Result<(usize, usize)> {
                 if let Some(img) = ex.image.as_deref().filter(|u| !u.is_empty()) {
                     let _ = bg_db::items::record_page_image(&ctx.db, *id, img).await;
                 }
+                // Community portals are discovery signals, not the end of the
+                // provenance chain. Preserve their URL and any explicit
+                // original-publisher link found on the article page.
+                let community = if url.contains("creaders.net") {
+                    Some("万维读者网")
+                } else if url.contains("wenxuecity.com") {
+                    Some("文学城")
+                } else {
+                    None
+                };
+                if let Some(name) = community {
+                    let _ = bg_db::community::record(
+                        &ctx.db,
+                        *id,
+                        name,
+                        url,
+                        ex.origin_name.as_deref(),
+                        ex.origin_url.as_deref(),
+                        ex.image.as_deref(),
+                    )
+                    .await;
+                }
                 got += 1;
             }
             Ok(None) => {

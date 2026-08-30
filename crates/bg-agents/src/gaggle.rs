@@ -120,6 +120,7 @@ pub async fn refresh(ctx: &Ctx) -> Result<usize> {
     let mut refreshed = tracked;
     for language in editions() {
         refreshed += refresh_language(ctx, language).await?;
+        refreshed += bg_db::gaggles::dedupe_overlapping(&ctx.db, language, 0.78).await?;
     }
     Ok(refreshed)
 }
@@ -187,6 +188,7 @@ pub async fn run(ctx: &Ctx, max_new: usize) -> Result<usize> {
     let mut total = briefed;
     for language in editions() {
         total += run_language(ctx, max_new, language).await?;
+        total += bg_db::gaggles::dedupe_overlapping(&ctx.db, language, 0.78).await?;
     }
     Ok(total)
 }

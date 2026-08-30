@@ -541,6 +541,21 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                             </section>
                         }
                     })}
+                {(!fp.community.is_empty()).then(|| {
+                    let items = fp.community.clone();
+                    view! {
+                        <section class="community-signal shell" aria-label="Community discovery wire">
+                            <header class="community-signal-head">
+                                <div><span>"COMMUNITY SIGNALS · AI TRACE"</span><h2>{match language { "zh" => "社区采编区", "zh-hant" => "社區採編區", _ => "Community discovery" }}</h2></div>
+                                <p>{match language { "zh" => "万维读者网与文学城提供热点线索；AI 深入原文、追溯来源并重写为维园网报道。", "zh-hant" => "從華文社區發現線索，追溯原始來源後獨立採編。", _ => "Community signals traced to original reporting, then independently synthesized." }}</p>
+                                <a href=format!("{}/community", language_prefix(language))>{match language { "zh" | "zh-hant" => "进入社区采编 →", _ => "Open community wire →" }}</a>
+                            </header>
+                            <div class="community-signal-grid">
+                                {items.into_iter().take(4).map(|s| view! { <Card story=s /> }).collect_view()}
+                            </div>
+                        </section>
+                    }
+                })}
                 // The ticker is crypto spot prices. On the AI desk it is not
                 // just irrelevant, it is misleading furniture — a reader could
                 // reasonably read a price strip as being about what they are
@@ -692,6 +707,28 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                 </div>
             }
         )}
+    }
+}
+
+#[component]
+pub fn Community() -> impl IntoView {
+    let location = use_location();
+    let language = Memo::new(move |_| language_from_path(&location.pathname.get()).to_string());
+    let data = Resource::new(move || language.get(), get_community);
+    view! {
+        <Title text="社区采编 — 维园网" />
+        <div class="shell page community-page">
+            <div class="community-hero">
+                <span class="eyebrow">"COMMUNITY SIGNALS · SOURCE TRACE · AI SYNTHESIS"</span>
+                <h1>"社区采编区"</h1>
+                <p>"从万维读者网、文学城等海外华文社区发现争议与热度，进入文章页追踪原始媒体和引用链接，再由维园网 AI 编辑部核验、综合和独立成稿。这里不复刻来源全文。"</p>
+                <div class="community-flow"><b>"社区热点"</b><i>"→"</i><b>"原文追踪"</b><i>"→"</i><b>"交叉核验"</b><i>"→"</i><b>"维园网分析"</b></div>
+            </div>
+            {loaded!(data, |c| view! {
+                <div class="community-proof"><span>{format!("已追溯 {} 条原始来源链", c.traced_origins)}</span><span>"来源图片优先 · 无图才生成品牌图"</span></div>
+                <div class="community-story-grid">{c.stories.into_iter().map(|s| view! { <Card story=s /> }).collect_view()}</div>
+            })}
+        </div>
     }
 }
 

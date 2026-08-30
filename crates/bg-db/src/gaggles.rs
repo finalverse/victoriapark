@@ -6,6 +6,7 @@ use bg_core::{
     ids::{RunId, StoryId},
 };
 use sqlx::Row;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 /// Headlines from the recent window, paired with the outlet that ran them.
@@ -349,6 +350,105 @@ const COLS: &str = "topic, slug, title, standfirst, source_count, story_count, m
 /// reporting. Scout may track and search it before this point, but the home
 /// page and topic index do not promote an empty promise.
 pub const HOT_TOPIC_MIN_STORIES: i32 = 5;
+
+/// Collapse topic pages that are different labels for the same event.
+///
+/// Topic names are generated from headline terms, so “Hormuz tensions” and
+/// “U.S.–Iran latest” can be lexically different while containing the same
+/// reports. Story membership is the stronger identity. Pinned dossiers win;
+/// otherwise the fuller topic wins. A high threshold prevents broad beats from
+/// swallowing narrower events.
+pub async fn dedupe_overlapping(
+    db: &Db,
+    language: EditorialLanguage,
+    threshold: f32,
+) -> Result<usize> {
+    let rows = sqlx::query(
+        "SELECT g.id, g.pinned, g.story_count, g.source_count,
+                coalesce(array_agg(gs.story_id) FILTER (WHERE gs.story_id IS NOT NULL), '{}') AS stories
+           FROM gaggles g
+           LEFT JOIN gaggle_stories gs ON gs.gaggle_id=g.id
+          WHERE g.editorial_language=$1
+            AND (g.pinned OR g.last_hot_at > now() - interval '14 days')
+          GROUP BY g.id
+          ORDER BY g.pinned DESC, g.story_count DESC, g.source_count DESC, g.last_hot_at DESC",
+    )
+    .bind(language.as_str())
+    .fetch_all(&db.pool)
+    .await?;
+
+    let mut keepers: Vec<(Uuid, HashSet<Uuid>)> = Vec::new();
+    let mut merged = 0usize;
+    for row in rows {
+        let id: Uuid = row.try_get("id")?;
+        let stories: HashSet<Uuid> = row
+            .try_get::<Vec<Uuid>, _>("stories")?
+            .into_iter()
+            .collect();
+        if stories.len() < HOT_TOPIC_MIN_STORIES as usize {
+            keepers.push((id, stories));
+            continue;
+        }
+        let duplicate = keepers.iter().find_map(|(keeper, known)| {
+            (topic_overlap(known, &stories) >= threshold).then_some(*keeper)
+        });
+        if let Some(keeper) = duplicate {
+            let mut tx = db.pool.begin().await?;
+            sqlx::query(
+                "INSERT INTO gaggle_stories(gaggle_id, story_id)
+                 SELECT $1, story_id FROM gaggle_stories WHERE gaggle_id=$2
+                 ON CONFLICT DO NOTHING",
+            )
+            .bind(keeper)
+            .bind(id)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query("DELETE FROM gaggles WHERE id=$1")
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query(
+                "UPDATE gaggles SET story_count=(SELECT count(*) FROM gaggle_stories WHERE gaggle_id=$1), last_hot_at=now() WHERE id=$1",
+            )
+            .bind(keeper)
+            .execute(&mut *tx)
+            .await?;
+            tx.commit().await?;
+            if let Some((_, known)) = keepers.iter_mut().find(|(k, _)| *k == keeper) {
+                known.extend(stories);
+            }
+            merged += 1;
+        } else {
+            keepers.push((id, stories));
+        }
+    }
+    Ok(merged)
+}
+
+fn topic_overlap(a: &HashSet<Uuid>, b: &HashSet<Uuid>) -> f32 {
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    let shared = a.intersection(b).count() as f32;
+    shared / a.union(b).count() as f32
+}
+
+#[cfg(test)]
+mod overlap_tests {
+    use super::topic_overlap;
+    use std::collections::HashSet;
+    use uuid::Uuid;
+
+    #[test]
+    fn same_event_overlaps_but_adjacent_events_do_not() {
+        let ids: Vec<_> = (0..8).map(|_| Uuid::new_v4()).collect();
+        let a: HashSet<_> = ids[..6].iter().copied().collect();
+        let b: HashSet<_> = ids[..6].iter().copied().collect();
+        let c: HashSet<_> = ids[5..].iter().copied().collect();
+        assert_eq!(topic_overlap(&a, &b), 1.0);
+        assert!(topic_overlap(&a, &c) < 0.25);
+    }
+}
 
 /// Gaggles still being covered, hottest first.
 ///

@@ -334,6 +334,33 @@ pub async fn published_for_language(
     rows.iter().map(from_row).collect()
 }
 
+/// Published syntheses discovered through Chinese community news portals.
+///
+/// The returned rows are VictoriaPark stories, never the portals' copied body.
+/// Membership is traced through the raw item so a story can retain its normal
+/// category while also appearing in the community-discovery surface.
+pub async fn community_for_language(
+    db: &Db,
+    language: EditorialLanguage,
+    limit: i64,
+) -> Result<Vec<Story>> {
+    let rows = crate::sql(format!(
+        "SELECT {COLS} FROM stories
+          WHERE status='published' AND editorial_language=$1
+            AND id IN (
+                SELECT si.story_id FROM story_items si
+                JOIN community_source_chains c ON c.raw_item_id=si.raw_item_id
+            )
+          ORDER BY published_at DESC
+          LIMIT $2"
+    ))
+    .bind(language.as_str())
+    .bind(limit)
+    .fetch_all(&db.pool)
+    .await?;
+    rows.iter().map(from_row).collect()
+}
+
 pub async fn by_category(db: &Db, cat: Category, limit: i64) -> Result<Vec<Story>> {
     by_category_for_language(db, cat, EditorialLanguage::En, limit).await
 }

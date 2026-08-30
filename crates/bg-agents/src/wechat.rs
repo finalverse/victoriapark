@@ -80,6 +80,16 @@ async fn run_one(ctx: &Ctx, story: StoryId) -> Result<()> {
             .trim_end_matches('/'),
         s.slug
     );
+    // Publisher images are mirrored by the public image route before they are
+    // exposed to readers. Use that stable, credited copy for WeChat rather
+    // than hotlinking a CDN URL that may expire or block Chinese clients.
+    let mirrored_source_image = format!(
+        "{}/img/{}",
+        std::env::var("BG_PUBLIC_BASE_URL")
+            .unwrap_or_else(|_| "https://victoriapark.io".into())
+            .trim_end_matches('/'),
+        s.slug
+    );
     let system = format!("{}\n\n---\n\n{}", crate::HOUSE_STYLE, SYSTEM);
     stage(ctx, AgentRole::Herald, Some(story), "wechat", |_run| async move {
         let mut prompt = format!(
@@ -96,8 +106,9 @@ async fn run_one(ctx: &Ctx, story: StoryId) -> Result<()> {
             .with_schema(schema()).with_max_tokens(4_500);
         let (copy, completion) = ctx.llm.complete_json::<WechatCopy>(&req).await?;
         let (image_url, image_origin) = s.image_url.as_deref()
-            .map(|url| (url, "source"))
-            .unwrap_or((fallback_image.as_str(), "victoriapark"));
+            .filter(|url| !url.is_empty())
+            .map(|_| (mirrored_source_image.as_str(), "source-mirrored"))
+            .unwrap_or((fallback_image.as_str(), "victoriapark-generated"));
         bg_db::distribution::upsert_wechat(&ctx.db, story, &bg_db::distribution::NewWechatPackage {
             title: copy.title.trim(), summary_md: copy.summary.trim(),
             key_facts: &copy.key_facts, unknowns: &copy.unknowns,

@@ -58,7 +58,15 @@ pub struct FrontPage {
     /// Current edition's strongest live headlines, ranked independently from
     /// page layout so readers can scan momentum at a glance.
     pub hotline: Vec<StoryCard>,
+    /// VictoriaPark syntheses discovered through Chinese community portals.
+    pub community: Vec<StoryCard>,
     pub honk: Option<StoryCard>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CommunityPage {
+    pub stories: Vec<StoryCard>,
+    pub traced_origins: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

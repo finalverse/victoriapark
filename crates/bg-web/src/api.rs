@@ -343,6 +343,17 @@ pub async fn get_front_page(
         .filter(|g| !g.pinned)
         .take(10)
         .collect();
+    let community_rows = bg_db::stories::community_for_language(db, language, 8)
+        .await
+        .unwrap_or_default();
+    let community = community_rows
+        .iter()
+        .map(|s| {
+            let mut c = card(s, None);
+            c.source_kind = "community".into();
+            c
+        })
+        .collect();
 
     Ok(FrontPage {
         lead,
@@ -351,8 +362,36 @@ pub async fn get_front_page(
         tracked,
         gaggles,
         hotline,
+        community,
         prices,
         honk,
+    })
+}
+
+#[server(name = GetCommunity, prefix = "/rpc")]
+pub async fn get_community(language: String) -> Result<CommunityPage, ServerFnError> {
+    use std::str::FromStr;
+    let language = bg_core::domain::EditorialLanguage::from_str(&language)
+        .unwrap_or(bg_core::domain::EditorialLanguage::Zh);
+    let db = db();
+    let rows = bg_db::stories::community_for_language(db, language, 80)
+        .await
+        .map_err(e)?;
+    let mut stories: Vec<_> = rows
+        .iter()
+        .map(|s| {
+            let mut c = card(s, None);
+            c.source_kind = "community".into();
+            c
+        })
+        .collect();
+    flag_analysis(db, &rows, &mut stories).await;
+    let stats = bg_db::community::stats(db, language.as_str())
+        .await
+        .map_err(e)?;
+    Ok(CommunityPage {
+        stories,
+        traced_origins: stats.origins,
     })
 }
 

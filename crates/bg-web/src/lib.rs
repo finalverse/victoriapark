@@ -131,6 +131,11 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/zh-hant/wire") view=pages::WireZhHant />
                     <Route path=path!("/ja/wire") view=pages::WireJa />
                     <Route path=path!("/ko/wire") view=pages::WireKo />
+                    <Route path=path!("/community") view=pages::Community />
+                    <Route path=path!("/zh-hant/community") view=pages::Community />
+                    <Route path=path!("/en/community") view=pages::Community />
+                    <Route path=path!("/ja/community") view=pages::Community />
+                    <Route path=path!("/ko/community") view=pages::Community />
                     <Route path=path!("/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />
                     <Route path=path!("/en/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />
                     <Route path=path!("/zh-hant/gaggle/:slug") view=pages::Gaggle ssr=SsrMode::Async />

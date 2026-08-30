@@ -138,6 +138,7 @@ pub fn Masthead() -> impl IntoView {
                     <a href=move || format!("{}#focus-news", edition_prefix(language.get()))>{move || match language.get() { "zh" => "焦点新闻", "zh-hant" => "焦點", "ja" => "注目", "ko" => "주요", _ => "Focus" }}</a>
                     <A href=edition_href("/desk")>{move || match language.get() { "zh" => "原创", "zh-hant" => "原創", "ja" => "独自報道", "ko" => "자체 보도", _ => "Desk" }}</A>
                     <A href=edition_href("/wire")>{move || match language.get() { "zh" => "快讯", "zh-hant" => "快訊", "ja" => "速報", "ko" => "속보", _ => "Wire" }}</A>
+                    <A href=edition_href("/community")>{move || match language.get() { "zh" => "社区采编", "zh-hant" => "社區採編", _ => "Community" }}</A>
                     <A href=edition_href("/flyway")>{move || match language.get() { "zh" => "专题", "zh-hant" => "專題", "ja" => "特集", "ko" => "특집", _ => "Topics" }}</A>
                     <A href=edition_href("/flock")>{move || match language.get() { "zh" => "AI 编辑部", "zh-hant" => "AI 編輯部", "ja" => "AI編集部", "ko" => "AI 편집국", _ => "Agents" }}</A>
                     <A href=edition_href("/standards")>{move || match language.get() { "zh" => "编辑标准", "zh-hant" => "編輯標準", "ja" => "編集基準", "ko" => "편집 기준", _ => "Standards" }}</A>
