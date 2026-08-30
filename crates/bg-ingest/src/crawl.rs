@@ -115,7 +115,13 @@ pub async fn index(
     if !resp.status().is_success() {
         return Ok(Vec::new());
     }
-    let html = resp.text().await?;
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let bytes = resp.bytes().await?;
+    let html = crate::html_decode::decode(&bytes, content_type.as_deref(), index_url);
     Ok(links(&html, index_url, selector, max))
 }
 

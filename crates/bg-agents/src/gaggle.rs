@@ -439,8 +439,7 @@ fn valid_topic_framing(title: &str, standfirst: &str, language: EditorialLanguag
     let lower_title = title.to_lowercase();
     title_len >= 3
         && title_len <= title_cap
-        && standfirst_len >= 30
-        && standfirst_len <= 700
+        && (30..=700).contains(&standfirst_len)
         && !title.contains(['\n', '\r'])
         && !standfirst.contains("###")
         && !title.starts_with('#')
@@ -448,6 +447,7 @@ fn valid_topic_framing(title: &str, standfirst: &str, language: EditorialLanguag
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod framing_tests {
     use super::valid_topic_framing;
     use bg_core::domain::EditorialLanguage;

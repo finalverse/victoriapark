@@ -171,6 +171,63 @@ fn front_copy(language: &str, beat: Option<&str>) -> (&'static str, &'static str
     }
 }
 
+fn category_label(category: bg_core::domain::Category, language: &str) -> &'static str {
+    match language {
+        "zh" => category.label_zh(),
+        "zh-hant" => category.label_zh_hant(),
+        "ja" => category.label_ja(),
+        "ko" => category.label_ko(),
+        _ => category.label(),
+    }
+}
+
+fn desk_categories(beat: &str) -> &'static [bg_core::domain::Category] {
+    use bg_core::domain::Category::*;
+    match beat {
+        "ai" => &[Ai, Models, Research, Compute, Safety, Policy],
+        "crypto" => &[Markets, Defi, Policy, Security, Nft],
+        "markets" => &[Markets, Business, Policy, Defi, Energy],
+        "tech" => &[Tech, Compute, Security, Energy, Gaming],
+        "world" => &[World, Politics, Policy, Security, Business],
+        "science" => &[Science, Health, Climate, Space, Research, Energy],
+        "culture" => &[Culture, Entertainment, Sports, Gaming],
+        _ => &[],
+    }
+}
+
+#[component]
+fn DeskHero(beat: &'static str, language: &'static str) -> impl IntoView {
+    let (title, blurb) = front_copy(language, Some(beat));
+    let heading = title.split(" — ").next().unwrap_or(title);
+    let sections = desk_categories(beat);
+    view! {
+        <section class=format!("desk-hero desk-hero-{beat}")>
+            <div class="shell desk-hero-inner">
+                <div>
+                    <span class="desk-hero-eyebrow">{match language {
+                        "zh" => "维园网独立栏目",
+                        "zh-hant" => "維園網獨立欄目",
+                        "ja" => "VICTORIAPARK 専門デスク",
+                        "ko" => "VICTORIAPARK 전문 데스크",
+                        _ => "VICTORIAPARK INDEPENDENT DESK",
+                    }}</span>
+                    <h1>{heading}</h1>
+                    <p>{blurb}</p>
+                </div>
+                <div class="desk-hero-signal" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+            </div>
+            <nav class="shell desk-section-rail" aria-label="Sections in this desk">
+                <b>{match language { "zh" => "本栏分类", "zh-hant" => "本欄分類", "ja" => "関連セクション", "ko" => "관련 섹션", _ => "Inside this desk" }}</b>
+                {sections.iter().map(|category| view! {
+                    <a href=format!("{}/section/{}", language_prefix(language), category.as_str())>
+                        {category_label(*category, language)}
+                    </a>
+                }).collect_view()}
+            </nav>
+        </section>
+    }
+}
+
 // ---------------------------------------------------------------------------
 // home
 // ---------------------------------------------------------------------------
@@ -375,7 +432,8 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
             data,
             |fp| view! {
                 {fp.honk.clone().map(|h| view! { <HonkBar story=h /> })}
-                {(language == "zh").then(|| view! {
+                {beat.map(|desk| view! { <DeskHero beat=desk language=language /> })}
+                {(language == "zh" && beat.is_none()).then(|| view! {
                     <section class="edition-scope shell" aria-label="Simplified Chinese edition scope">
                         <strong>"海外简中版"</strong>
                         <span>"面向中国大陆、香港、澳门以外的海外华语读者；不作上述地区的本地化或定向分发。与中国有关的全球新闻仍按证据和公共价值报道。"</span>
@@ -547,7 +605,7 @@ fn Front(#[prop(optional)] beat: Option<&'static str>, language: &'static str) -
                         <section class="community-signal shell" aria-label="Community discovery wire">
                             <header class="community-signal-head">
                                 <div><span>"COMMUNITY SIGNALS · AI TRACE"</span><h2>{match language { "zh" => "社区采编区", "zh-hant" => "社區採編區", _ => "Community discovery" }}</h2></div>
-                                <p>{match language { "zh" => "万维读者网与文学城提供热点线索；AI 深入原文、追溯来源并重写为维园网报道。", "zh-hant" => "從華文社區發現線索，追溯原始來源後獨立採編。", _ => "Community signals traced to original reporting, then independently synthesized." }}</p>
+                                <p>{match language { "zh" => "从海外华文社区论坛与媒体发现热点线索；AI 深入原文、追溯来源并独立采编。", "zh-hant" => "從海外華文社區論壇與媒體發現線索，追溯原始來源後獨立採編。", _ => "Community signals traced to original reporting, then independently synthesized." }}</p>
                                 <a href=format!("{}/community", language_prefix(language))>{match language { "zh" | "zh-hant" => "进入社区采编 →", _ => "Open community wire →" }}</a>
                             </header>
                             <div class="community-signal-grid">
@@ -721,7 +779,7 @@ pub fn Community() -> impl IntoView {
             <div class="community-hero">
                 <span class="eyebrow">"COMMUNITY SIGNALS · SOURCE TRACE · AI SYNTHESIS"</span>
                 <h1>"社区采编区"</h1>
-                <p>"从万维读者网、文学城等海外华文社区发现争议与热度，进入文章页追踪原始媒体和引用链接，再由维园网 AI 编辑部核验、综合和独立成稿。这里不复刻来源全文。"</p>
+                <p>"从海外华文社区论坛与媒体发现争议与热度，进入文章页追踪原始媒体和引用链接，再由维园网 AI 编辑部核验、综合和独立成稿。这里不复刻来源全文。"</p>
                 <div class="community-flow"><b>"社区热点"</b><i>"→"</i><b>"原文追踪"</b><i>"→"</i><b>"交叉核验"</b><i>"→"</i><b>"维园网分析"</b></div>
             </div>
             {loaded!(data, |c| view! {
@@ -1184,25 +1242,31 @@ fn SectionEdition(language: &'static str) -> impl IntoView {
         {loaded!(
             data,
             |pair| {
-                let (label, stories) = pair;
+                let (category, label, stories) = pair;
+                let lede = match language {
+                    "zh" => format!("维园网在「{label}」栏目采编的全部报道，按时效与重要性组织。"),
+                    "zh-hant" => format!("維園網在「{label}」欄目採編的全部報道，按時效與重要性組織。"),
+                    "ja" => format!("VictoriaParkの「{label}」デスクが取材した記事を、重要度と鮮度で構成します。"),
+                    "ko" => format!("VictoriaPark의 ‘{label}’ 데스크 기사를 중요도와 최신성에 따라 구성합니다."),
+                    _ => format!("All VictoriaPark reporting filed to {label}, organized by importance and recency."),
+                };
                 view! {
                     <Title text=format!(
                         "{label} — {}",
                         site_name(language),
                     ) />
-                    <div class="shell page">
-                        <div class="page-head">
+                    <div class=format!("shell page section-page section-{category}")>
+                        <div class="page-head section-page-head" data-section=category.clone()>
+                            <span class="desk-hero-eyebrow">{match language { "zh" => "独立内容栏目", "zh-hant" => "獨立內容欄目", "ja" => "ニュースセクション", "ko" => "뉴스 섹션", _ => "NEWS SECTION" }}</span>
                             <h1>{label.clone()}</h1>
-                            <p class="lede">
-                                {format!("Everything the newsroom has filed under {label}.")}
-                            </p>
+                            <p class="lede">{lede}</p>
                         </div>
                         <SectionNav language=language />
                         {if stories.is_empty() {
                             view! {
                                 <Empty
-                                    message="Nothing filed to this section yet."
-                                    hint="bg run"
+                                    message=match language { "zh" => "本栏目正在采编，稍后回来查看最新报道。", "zh-hant" => "本欄目正在採編，稍後回來查看最新報道。", "ja" => "このセクションは現在取材中です。", "ko" => "이 섹션은 현재 취재 중입니다.", _ => "This section is being gathered now." }
+                                    hint=""
                                 />
                             }
                                 .into_any()

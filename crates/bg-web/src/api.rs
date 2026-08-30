@@ -305,33 +305,42 @@ pub async fn get_front_page(
     // Live only — a topic nobody has written about for two days is an archive
     // page, not a special topic, and offering it as one is how a news site ends
     // up looking abandoned.
-    let topic_cards: Vec<GaggleCard> = bg_db::gaggles::live_for_language(db, language, 48, 24)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|g| GaggleCard {
-            slug: g.slug,
-            title: g.title,
-            standfirst: g.standfirst,
-            sources: g.source_count,
-            stories: g.story_count,
-            model: g.model.unwrap_or_default(),
-            language: g.editorial_language,
-            pinned: g.pinned,
-            analysis_html: render_body(&g.analysis_md),
-            watchpoints: g.watchpoints,
-            primary_sources: g
-                .primary_source_names
-                .into_iter()
-                .zip(g.primary_source_urls)
-                .map(|(name, url)| TopicSource { name, url })
-                .collect(),
-            last_updated: g
-                .last_briefed_at
-                .map(|at| at.to_rfc3339())
-                .unwrap_or_default(),
-        })
-        .collect();
+    let topic_cards: Vec<GaggleCard> = if beat.is_none() {
+        bg_db::gaggles::live_for_language(db, language, 48, 24)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|g| GaggleCard {
+                slug: g.slug,
+                title: g.title,
+                standfirst: g.standfirst,
+                sources: g.source_count,
+                stories: g.story_count,
+                model: g.model.unwrap_or_default(),
+                language: g.editorial_language,
+                pinned: g.pinned,
+                analysis_html: render_body(&g.analysis_md),
+                watchpoints: g.watchpoints,
+                primary_sources: g
+                    .primary_source_names
+                    .into_iter()
+                    .zip(g.primary_source_urls)
+                    .map(|(name, url)| TopicSource { name, url })
+                    .collect(),
+                last_updated: g
+                    .last_briefed_at
+                    .map(|at| at.to_rfc3339())
+                    .unwrap_or_default(),
+            })
+            .collect()
+    } else {
+        // A desk URL is a promise to show that desk. Global topic cards are
+        // event dossiers rather than beat-tagged stories, so inserting them on
+        // every desk made Markets, AI and Culture all begin with the same
+        // politics-and-war Watch Desk. Keep the global radar on the edition
+        // home; desk pages lead with their own ranked reporting.
+        Vec::new()
+    };
     let tracked: Vec<GaggleCard> = topic_cards
         .iter()
         .filter(|g| g.pinned)
@@ -343,9 +352,13 @@ pub async fn get_front_page(
         .filter(|g| !g.pinned)
         .take(10)
         .collect();
-    let community_rows = bg_db::stories::community_for_language(db, language, 8)
-        .await
-        .unwrap_or_default();
+    let community_rows = if beat.is_none() {
+        bg_db::stories::community_for_language(db, language, 8)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let community = community_rows
         .iter()
         .map(|s| {
@@ -510,7 +523,7 @@ pub async fn get_gaggle(
 pub async fn get_section(
     category: String,
     language: String,
-) -> Result<(String, Vec<StoryCard>), ServerFnError> {
+) -> Result<(String, String, Vec<StoryCard>), ServerFnError> {
     use std::str::FromStr;
     let db = db();
     let cat = bg_core::domain::Category::from_str(&category)
@@ -522,7 +535,14 @@ pub async fn get_section(
         .map_err(e)?;
     let mut cards: Vec<StoryCard> = stories.iter().map(|s| card(s, None)).collect();
     flag_analysis(db, &stories, &mut cards).await;
-    Ok((cat.label().to_string(), cards))
+    let label = match language {
+        bg_core::domain::EditorialLanguage::Zh => cat.label_zh(),
+        bg_core::domain::EditorialLanguage::ZhHant => cat.label_zh_hant(),
+        bg_core::domain::EditorialLanguage::Ja => cat.label_ja(),
+        bg_core::domain::EditorialLanguage::Ko => cat.label_ko(),
+        bg_core::domain::EditorialLanguage::En => cat.label(),
+    };
+    Ok((cat.as_str().to_string(), label.to_string(), cards))
 }
 
 // ---------------------------------------------------------------------------

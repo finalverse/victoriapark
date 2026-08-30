@@ -422,6 +422,7 @@ dependencies = [
  "bg-core",
  "bg-db",
  "chrono",
+ "encoding_rs",
  "feed-rs",
  "futures",
  "image",

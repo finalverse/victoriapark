@@ -65,6 +65,7 @@ subtle = "2.6"
 url = "2"
 regex = "1"
 rand = "0.9"
+encoding_rs = "0.8"
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 
 # --- leptos ---

@@ -347,6 +347,11 @@ pub async fn community_for_language(
     let rows = crate::sql(format!(
         "SELECT {COLS} FROM stories
           WHERE status='published' AND editorial_language=$1
+            -- Never render legacy decoder damage. Migration 0031 removes the
+            -- known rows; this guard also prevents a malformed future fetch
+            -- from reaching a public surface before an editor can intervene.
+            AND position(chr(65533) in title) = 0
+            AND position(chr(65533) in coalesce(summary, '')) = 0
             AND id IN (
                 SELECT si.story_id FROM story_items si
                 JOIN community_source_chains c ON c.raw_item_id=si.raw_item_id

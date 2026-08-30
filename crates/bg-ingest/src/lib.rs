@@ -12,6 +12,7 @@ pub mod canonical;
 pub mod crawl;
 pub mod feeds;
 pub mod hotlists;
+pub mod html_decode;
 pub mod http;
 pub mod market;
 pub mod mirror;

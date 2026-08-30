@@ -124,7 +124,13 @@ pub async fn fetch(
         return Ok(None);
     }
 
-    let body = resp.text().await?;
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let bytes = resp.bytes().await?;
+    let body = crate::html_decode::decode(&bytes, content_type.as_deref(), url);
     Ok(extract(&body).map(|mut e| {
         e.image = lead_image(&body, url);
         let (origin_url, origin_name) = source_reference(&body, url);

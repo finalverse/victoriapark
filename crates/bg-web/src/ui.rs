@@ -109,7 +109,7 @@ pub fn Masthead() -> impl IntoView {
                     // for the first moments of every page load.
                     <details class="desk-more">
                         <summary class="desk-link" aria-label="All sections">
-                            {move || match language.get() { "zh" => "更多", "zh-hant" => "更多", "ja" => "その他", "ko" => "더보기", _ => "More" }}
+                            {move || match language.get() { "zh" => "全部栏目", "zh-hant" => "全部欄目", "ja" => "全セクション", "ko" => "전체 섹션", _ => "All sections" }}
                         </summary>
                         <div class="desk-more-panel">
                             {bg_core::domain::Category::ALL
