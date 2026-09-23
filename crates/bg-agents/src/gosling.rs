@@ -47,6 +47,29 @@ pub const SYSTEM: &str = include_str!("../../../prompts/gosling.md");
 /// scheduled — and still halves the request count against ten.
 const BATCH: usize = 20;
 
+/// CPU-served local models trade request cost for predictable latency. A
+/// twenty-item cloud batch can exceed the shared 180-second HTTP deadline on
+/// a 7B model running without a GPU, leaving the queue untouched. Eight items
+/// stays comfortably inside the deadline while still amortising the prompt.
+const LOCAL_BATCH: usize = 8;
+const LOCAL_MAX_TOKENS: u32 = 1_600;
+
+fn batch_size(local: bool) -> usize {
+    if local {
+        LOCAL_BATCH
+    } else {
+        BATCH
+    }
+}
+
+fn output_reservation(local: bool) -> u32 {
+    if local {
+        LOCAL_MAX_TOKENS
+    } else {
+        3_000
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct TriageBatch {
     items: Vec<TriageItem>,
@@ -113,9 +136,11 @@ pub async fn run(ctx: &Ctx, limit: i64) -> Result<usize> {
         let beat = it.beat.unwrap_or(bg_core::domain::Beat::Crypto);
         by_beat.entry(beat).or_default().push(it);
     }
+    let local = ctx.llm.tier_is_local(ModelTier::Fast);
+    let batch = batch_size(local);
     let batches: Vec<(bg_core::domain::Beat, Vec<_>)> = by_beat
         .into_iter()
-        .flat_map(|(b, v)| v.chunks(BATCH).map(|c| (b, c.to_vec())).collect::<Vec<_>>())
+        .flat_map(|(b, v)| v.chunks(batch).map(|c| (b, c.to_vec())).collect::<Vec<_>>())
         .collect();
 
     for (beat, chunk) in batches {
@@ -139,7 +164,7 @@ pub async fn run(ctx: &Ctx, limit: i64) -> Result<usize> {
 
             let req = Request::new("gosling.triage", ModelTier::Fast, system, prompt)
                 .with_schema(schema(chunk.len(), beat))
-                .with_max_tokens(3_000);
+                .with_max_tokens(output_reservation(local));
             let (parsed, completion) = ctx.llm.complete_json::<TriageBatch>(&req).await?;
 
             let mut n = 0usize;
@@ -177,11 +202,19 @@ pub async fn run(ctx: &Ctx, limit: i64) -> Result<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::SYSTEM;
+    use super::{batch_size, output_reservation, BATCH, LOCAL_BATCH, LOCAL_MAX_TOKENS, SYSTEM};
 
     #[test]
     fn intake_prompt_requires_a_complete_batch() {
         assert!(SYSTEM.contains("Return exactly one `items` entry"));
         assert!(SYSTEM.contains("never omit an item"));
+    }
+
+    #[test]
+    fn local_triage_favours_latency_over_request_count() {
+        assert_eq!(batch_size(true), LOCAL_BATCH);
+        assert_eq!(output_reservation(true), LOCAL_MAX_TOKENS);
+        assert!(batch_size(true) < BATCH);
+        assert!(output_reservation(true) < output_reservation(false));
     }
 }
