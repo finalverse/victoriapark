@@ -112,7 +112,12 @@ impl Default for RunOpts {
             ingest: true,
             prices: true,
             ombuds: true,
-            max_triage: 100,
+            // Triage is the gate for every later stage.  A local model can
+            // spend minutes on each batch; forcing 100 items through before
+            // clustering and drafting makes a healthy worker look frozen and
+            // delays publication.  Operators can keep a smaller, predictable
+            // slice moving through the whole newsroom on every pass.
+            max_triage: env_i64("BG_MAX_TRIAGE", 100),
             // Clustering is mostly deterministic, and publication cannot see
             // anything still waiting here. Matching triage capacity prevents
             // this stage from becoming a permanent choke point; operators can
